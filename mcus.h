@@ -1,0 +1,139 @@
+// The names of all MCUs known to us
+const char nullstr[] PROGMEM = "No MCU";
+const char at90s2313[] PROGMEM = "AT90S2313";
+const char at90s2333[] PROGMEM = "AT90S2333";
+const char at90s2343[] PROGMEM = "AT90S2343";
+const char at90s4433[] PROGMEM = "AT90S4433";
+const char at90s4434[] PROGMEM = "AT90S4434";
+const char at90s8515[] PROGMEM = "AT90S8515";
+const char at90s8535[] PROGMEM = "AT90S8535";
+const char attiny11[] PROGMEM = "ATtiny11";
+const char attiny12[] PROGMEM = "ATtiny12";
+const char attiny13[] PROGMEM = "ATtiny13";
+const char attiny15[] PROGMEM = "ATtiny15";
+const char attiny2313[] PROGMEM = "ATtiny2313";
+const char attiny4313[] PROGMEM = "ATtiny4313";
+const char attiny24[] PROGMEM = "ATtiny24";
+const char attiny44[] PROGMEM = "ATtiny44";
+const char attiny84[] PROGMEM = "ATtiny84";
+const char attiny25[] PROGMEM = "ATtiny25";
+const char attiny45[] PROGMEM = "ATtiny45";
+const char attiny85[] PROGMEM = "ATtiny85";
+const char attiny26[] PROGMEM = "ATtiny26";
+const char attiny261[] PROGMEM = "ATtiny261";
+const char attiny461[] PROGMEM = "ATtiny461";
+const char attiny861[] PROGMEM = "ATtiny861";
+const char attiny28[] PROGMEM = "ATtiny28";
+const char attiny48[] PROGMEM = "ATtiny48";
+const char attiny88[] PROGMEM = "ATtiny88";
+const char atmega8515[] PROGMEM = "ATmega8515";
+const char atmega8535[] PROGMEM = "ATmega8535";
+const char atmega8[] PROGMEM = "ATmega8";
+const char atmega8hva[] PROGMEM = "ATmega8HVA";
+const char atmega16[] PROGMEM = "ATmega16";
+const char atmega16hva[] PROGMEM = "ATmega16HVA";
+const char atmega16hvb[] PROGMEM = "ATmega16HVB";
+const char atmega32[] PROGMEM = "ATmega32";
+const char atmega32c1[] PROGMEM = "ATmega32C1";
+const char atmega32hvb[] PROGMEM = "ATmega32HVB";
+const char atmega64[] PROGMEM = "ATmega64";
+const char atmega64c1[] PROGMEM = "ATmega64c1";
+const char atmega64hev2[] PROGMEM = "ATmega64HEV2";
+const char atmega64m1[] PROGMEM = "ATmega64m1";
+const char atmega128[] PROGMEM = "ATmega128";
+const char atmega128rfa1[] PROGMEM = "ATmega128RFA1";
+const char atmega162[] PROGMEM = "ATmega162";
+const char atmega48[] PROGMEM = "ATmega48";
+const char atmega48p[] PROGMEM = "ATmega48P";
+const char atmega88[] PROGMEM = "ATmega88";
+const char atmega88p[] PROGMEM = "ATmega88P";
+const char atmega168[] PROGMEM = "ATmega168";
+const char atmega168p[] PROGMEM = "ATmega168P";
+const char atmega328[] PROGMEM = "ATmega328";
+const char atmega328p[] PROGMEM = "ATmega328P";
+const char atmega164a[] PROGMEM = "ATmega164A";
+const char atmega164p[] PROGMEM = "ATmega164P";
+const char atmega324a[] PROGMEM = "ATmega324A";
+const char atmega324p[] PROGMEM = "ATmega324P";
+const char atmega324pa[] PROGMEM = "ATmega324PA";
+const char atmega644[] PROGMEM = "ATmega644";
+const char atmega644p[] PROGMEM = "ATmega644P";
+const char atmega644rfr2[] PROGMEM = "ATmega644RFR2";
+const char atmega1284[] PROGMEM = "ATmega1284";
+const char atmega1284p[] PROGMEM = "ATmega1284P";
+const char atmega1284rfr2[] PROGMEM = "ATmega1284RFR2";
+
+// table with signatures
+// 1st word signature (w/o 1E), 2nd word: MSB number of fuses (or 0 if we do not know),
+// 2nd word LSB: low fuse, 3rd word MSB: high fuse, 3rd word LSB: extended fuse,
+// 4th word string address. 
+
+#define MCU_NUM 64
+const uint16_t mcutypes[MCU_NUM][4] PROGMEM =
+  {
+    { 0x0000, 0x0000, 0x0000, (uint16_t)nullstr },
+    { 0xffff, 0x0000, 0x0000, (uint16_t)nullstr },
+    { 0x9101, 0x01FF, 0x0000, (uint16_t)at90s2313 },
+    { 0x9105, 0x01FF, 0x0000, (uint16_t)at90s2333 },
+    { 0x9103, 0x01FF, 0x0000, (uint16_t)at90s2343 },
+    { 0x9203, 0x01FF, 0x0000, (uint16_t)at90s4433 },
+    { 0x9202, 0x01FF, 0x0000, (uint16_t)at90s4434 },
+    { 0x9301, 0x01FF, 0x0000, (uint16_t)at90s8515 },
+    { 0x9303, 0x01FF, 0x0000, (uint16_t)at90s8535 },
+    { 0x9004, 0x01FF, 0x0000, (uint16_t)attiny11 },
+    { 0x9005, 0x01FF, 0x0000, (uint16_t)attiny12 },
+    { 0x9007, 0x026A, 0xFF00, (uint16_t)attiny13 },
+    { 0x9006, 0x01FF, 0x0000, (uint16_t)attiny15 },
+    { 0x910A, 0x0364, 0xDFFF, (uint16_t)attiny2313 },
+    { 0x920D, 0x0364, 0xDFFF, (uint16_t)attiny4313 },
+    { 0x910B, 0x0362, 0xDFFF, (uint16_t)attiny24 },
+    { 0x9207, 0x0362, 0xDFFF, (uint16_t)attiny44 },
+    { 0x930C, 0x0362, 0xDFFF, (uint16_t)attiny84 },
+    { 0x9108, 0x0362, 0xDFFF, (uint16_t)attiny25 },
+    { 0x9206, 0x0362, 0xDFFF, (uint16_t)attiny45 },
+    { 0x930B, 0x0362, 0xDFFF, (uint16_t)attiny85 },
+    { 0x9109, 0x0241, 0xF700, (uint16_t)attiny26 },
+    { 0x910C, 0x0362, 0xDFFF, (uint16_t)attiny261 },
+    { 0x9208, 0x0362, 0xDFFF, (uint16_t)attiny461 },
+    { 0x930D, 0x0362, 0xDFFF, (uint16_t)attiny861 },
+    { 0x9107, 0x01FF, 0x0000, (uint16_t)attiny28 },
+    { 0x9209, 0x036E, 0xDFFF, (uint16_t)attiny48 },
+    { 0x9311, 0x036E, 0xDFFF, (uint16_t)attiny88 },
+    { 0x9306, 0x02C1, 0xD900, (uint16_t)atmega8515 },
+    { 0x9308, 0x02C1, 0xD900, (uint16_t)atmega8535 },
+    { 0x9307, 0x02E1, 0xD900, (uint16_t)atmega8 },
+    { 0x9310, 0x01DF, 0x0000, (uint16_t)atmega8hva },
+    { 0x9403, 0x02E1, 0x9900, (uint16_t)atmega16 },
+    { 0x940c, 0x01DF, 0x0000, (uint16_t)atmega16hva },
+    { 0x940d, 0x02DE, 0xE900, (uint16_t)atmega16hvb },
+    { 0x9502, 0x02E1, 0x9900, (uint16_t)atmega32 },
+    { 0x9586, 0x0341, 0xD9F9, (uint16_t)atmega32c1 },
+    { 0x9510, 0x02DE, 0xE900, (uint16_t)atmega32hvb },
+    { 0x9602, 0x03C1, 0x99FF, (uint16_t)atmega64 },
+    { 0x9686, 0x0341, 0xD9F9, (uint16_t)atmega64c1 },
+    { 0x9610, 0x02D6, 0xF900, (uint16_t)atmega64hev2 },
+    { 0x9684, 0x0341, 0xD9F9, (uint16_t)atmega64m1 },
+    { 0x9702, 0x03C1, 0x99FD, (uint16_t)atmega128 },
+    { 0x9701, 0x03C1, 0x99FD, (uint16_t)atmega128rfa1 },
+    { 0x9404, 0x0362, 0x99FF, (uint16_t)atmega162 },
+    { 0x9205, 0x0362, 0xDFFF, (uint16_t)atmega48 },
+    { 0x920A, 0x0362, 0xDFFF, (uint16_t)atmega48p },
+    { 0x930A, 0x0362, 0xDFFF, (uint16_t)atmega88 },
+    { 0x930F, 0x0362, 0xDFF9, (uint16_t)atmega88p },
+    { 0x9406, 0x0362, 0xDFF9, (uint16_t)atmega168 },
+    { 0x940B, 0x0362, 0xDFFF, (uint16_t)atmega168p },
+    { 0x9514, 0x0362, 0xD9FF, (uint16_t)atmega328 },
+    { 0x950F, 0x0362, 0xD9FF, (uint16_t)atmega328p },
+    { 0x940F, 0x0342, 0x99FF, (uint16_t)atmega164a },
+    { 0x940A, 0x0342, 0x99FF, (uint16_t)atmega164p },
+    { 0x9515, 0x0342, 0x99FF, (uint16_t)atmega324a },
+    { 0x9508, 0x0342, 0x99FF, (uint16_t)atmega324p },
+    { 0x9511, 0x0342, 0x99FF, (uint16_t)atmega324pa },
+    { 0x9609, 0x0362, 0x99FF, (uint16_t)atmega644 },
+    { 0x960A, 0x0362, 0x99FF, (uint16_t)atmega644p },
+    { 0x9602, 0x0000, 0x0000, (uint16_t)atmega644rfr2 },
+    { 0x9706, 0x0342, 0x99FF, (uint16_t)atmega1284 },
+    { 0x9705, 0x0342, 0x99FF, (uint16_t)atmega1284p },
+    { 0x9703, 0x0000, 0x0000, (uint16_t)atmega1284rfr2 },
+  };
+
