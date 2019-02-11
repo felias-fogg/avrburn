@@ -8,7 +8,7 @@
 // the right parameters.
 
 
-byte spidat[9];
+byte spidat[6];
 
 byte get_spi_bitorder()
 {
@@ -40,20 +40,36 @@ void set_spi_para(byte dev)
   SPI.setClockDivider(spidat[dev+2]);
 }
 		  
-void init_isp_spi()
-{
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setDataMode(SPI_MODE0);
-  SPI.setClockDivider(spispeed);
-  get_spi_para(SPI_ISP);
-}
 
 uint32_t spi_transaction(uint8_t a,uint8_t b,uint8_t c,uint8_t d)
 {
   uint32_t result;
-  result = SPI.transfer(a);
-  result = (result<<8) | SPI.transfer(b);
-  result = (result<<8) | SPI.transfer(c);
-  result = (result<<8) | SPI.transfer(d);
+  result = soft_spi(a);
+  result = (result<<8) | soft_spi(b);
+  result = (result<<8) | soft_spi(c);
+  result = (result<<8) | soft_spi(d);
+  return result;
+}
+
+uint8_t soft_spi(uint8_t data)
+{
+  uint8_t result = 0;
+
+  cli();
+  for (byte b=0; b < 8; b++) {
+    if (data&0x80) 
+      setHigh(SOFT_MOSI);
+    else
+      setLow(SOFT_MOSI);
+    data <<= 1;
+    result <<= 1;
+    setHigh(SOFT_SCK);
+    delayMicroseconds(1);
+    if (getInput(SOFT_MISO)) result |= 1;
+    delayMicroseconds(spidelay);
+    setLow(SOFT_SCK);
+    delayMicroseconds(spidelay);
+  }
+  sei();
   return result;
 }
