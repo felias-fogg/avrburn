@@ -9,15 +9,19 @@
  *      This adds, however, 4k to the code. So, maybe, I will remove a few defs.
  *    - changed to soft spi for isp programming. This was necessary, because
  *      the programmed chips may use the programming lines afterwards! 
- * V0.3 (11.2.2019)
+ * V0.3 (13.2.2019)
  *    - switch from Gamebuino Classic to Gamebuino META
  *    - File choose menu for different kinds 
  *    - SPI speed adjusted
+ * V0.4
+ *    - Fuses and lock bits can be programmed, and verified
+ *    - Activity screens look similar to menu screens
+ *    - Only one NYI error
  */
 
-#define DEBUG
+// #define DEBUG
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -34,14 +38,17 @@
 // max list length
 #define MAX_LIST_LENGTH 128
 
+// max size of page buffer
+#define MAX_PAGE_SIZE 256
+
 // Pins
-#define SOFT_RST 2
+#define ARDU_PIN_RST 2
 #define PORT_RST PORT_PA14
-#define SOFT_MOSI 3
+#define ARDU_PIN_MOSI 3
 #define PORT_MOSI PORT_PA09
-#define SOFT_MISO 5
+#define ARDU_PIN_MISO 5
 #define PORT_MISO PORT_PA15
-#define SOFT_SCK 4
+#define ARDU_PIN_SCK 4
 #define PORT_SCK PORT_PA08
 
 // States
@@ -63,22 +70,21 @@
 #define NO_ERROR 0
 #define STATE_ERROR 1
 #define NYI_ERROR 2
-#define NYI_DETECT 3
-#define NYI_ERASE 4
-#define NYI_LOCKS 5
-#define NYI_FUSES 6
-#define NYI_FLASH 7
-#define NYI_EEPROM 8
-#define NYI_SETTINGS 9
-#define SD_ERROR 10
-#define SIG_ERROR 11
-#define UNKNOWN_SIG_ERROR 12
-#define NO_BURN_ERROR 13
-#define NO_MEM_ERROR 14
+#define SD_ERROR 3
+#define SIG_ERROR 4
+#define UNKNOWN_SIG_ERROR 5
+#define NO_MCU_ERROR 6
+#define NO_BURN_ERROR 7
+#define NO_MEM_ERROR 8
+#define FILE_DIR_ERROR 9
+#define FILE_OPEN_ERROR 10
+#define HEX_FILE_ERROR 11
 
-// SPI devices
-#define SPI_DISP 0
-#define SPI_SD 1
+// special verifiaction addresses
+#define VADDR_LOCK -4
+#define VADDR_LO -1
+#define VADDR_HI -2
+#define VADDR_EX -3
 
 // software spi speed
 #define SPI_SPEED0 65 // 25 kHz
@@ -87,6 +93,7 @@
 #define SPI_SPEED3 5 //  200 kHz
 #define SPI_SPEED4 1 //  400 kHz
 #define SPI_SPEED5 0 //  800 kHz
+#define FUSE_SPI_SPEED SPI_SPEED0
 
 // KINDs
 #define LOCKBIT_KIND 0
@@ -95,7 +102,7 @@
 #define EEP_KIND 3
 
 // timer
-#define BUSY_MS 10000UL // longest time we consider us self busy 
+#define BUSY_MS 3000UL // longest time we consider us self busy 
 
 
 #define NO_BTN 255
@@ -105,16 +112,23 @@ uint8_t state;
 uint8_t error;
 const char * kindExt[] = { ".LCK", ".FUS", ".HEX", ".EEP" };
 const char * kindStr[] = { "Lock", "Fuses", "Flash", "EEPROM" };
-int16_t settings[] = { 0, -1, -1, 0};
-int16_t speedopt[] = { 2, -2, -2, -2,  -2, 0};
-uint8_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4 };
+int16_t settings[] = { 0, 1, 1, 0};
+boolean autoverify = true;
+boolean autoerase = true;
+int16_t speedopt[] = { -2, -2, -2, 2,  -2, -2, 0};
+uint8_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4, SPI_SPEED5 };
 uint8_t spidelay = SPI_SPEED0;
-uint8_t progspidelay = SPI_SPEED0;
+uint8_t progspidelay = SPI_SPEED3;
 uint16_t mcusig;
-int16_t mcuix = -1;
+uint16_t mcuix;
 boolean progmode = false;
 int16_t mmpos, setpos;
 char buf[MAX_STRING_LENGTH+1];
+uint8_t pagebuf[MAX_PAGE_SIZE];
+boolean verified;
+int32_t verifyaddr;
+uint8_t verifyexpected, verifyseen;
+const char * verifyaddrStr[] = { "", "Low fuse", "High fuse", "Ext. Fuse", "Lock bits" };
 
 #ifdef DEBUG
 #define DEBPR(str) SerialUSB.print(str)
@@ -147,6 +161,7 @@ void start_burner()
   progmode = false;
   mmpos = 0;
   setpos = 0;
+  set_prog_mode(false);
 }
 
 		    
@@ -164,10 +179,10 @@ void loop() {
     case SPEED_STATE: speed_menu(); break;
     case DETECT_STATE: mcu_detect(); break;
     case ERASE_STATE: erase(); break;
-    case LOCK_STATE: rwv_menu(LOCKBIT_KIND); break;
+    case LOCK_STATE: fuse_menu(LOCKBIT_KIND); break;
     case FLASH_STATE:rwv_menu(FLASH_KIND); break;
     case EEP_STATE:rwv_menu(EEP_KIND); break;
-    case FUSE_STATE: fuse_menu(); break;
+    case FUSE_STATE: fuse_menu(FUSE_KIND); break;
     case ERROR_STATE: display_error(error);  break;
     default: error = STATE_ERROR; break;
     }
@@ -190,7 +205,7 @@ void main_menu()
   case MM_FUSE: state = FUSE_STATE; break;
   case MM_EEP: state = EEP_STATE; break;
   case MM_FLASH: state = FLASH_STATE; break;
-  default: error = NYI_ERROR + item; break;
+  default: error = NYI_ERROR; break;
   }
   DEBPR(F("main_menu exit: state="));
   DEBLN(state);
@@ -201,14 +216,16 @@ void settings_menu()
 {
   setpos = 0;
   int16_t item = menu("Settings Menu",settingsmenu, settings, NUMELS(settingsmenu), setpos);
-  if (state == RESET_STATE) return;
-  switch (item) {
-  case -1:
-  case ST_EXIT: state = MENU_STATE; break;
-  case ST_SPISPEED: state = SPEED_STATE; setpos = item; break;
-  default: error = NYI_ERROR + item; break;
+  if (state != RESET_STATE) {
+    switch (item) {
+    case -1:
+    case ST_EXIT: state = MENU_STATE; break;
+    case ST_SPISPEED: state = SPEED_STATE; setpos = item; break;
+    default: error = NYI_ERROR; break;
+    }
   }
- 
+  autoverify = (settings[ST_AUTOVERIFY] == 1);
+  autoerase = (settings[ST_AUTOERASE] == 1);
 }
 
 void speed_menu()
@@ -224,74 +241,104 @@ void rwv_menu(byte kind)
   int16_t item = menu(rvwtitle[kind],rwvmenu, NULL, NUMELS(rwvmenu), 0);
   if (state == RESET_STATE) return;
   switch(item) {
-  case RWV_PROG: program_file(kind); break;
-  case RWV_SAVE: save_file(kind); break;
-  case RWV_VERIFY: verify_file(kind); break;
+  case RWV_PROG: program(kind); break;
+  case RWV_READ: save_file(kind); break;
+  case RWV_VERIFY: verify(kind); break;
+  default: error = NYI_ERROR; break;
   }
   if (state != RESET_STATE) state = MENU_STATE; 
 }
 
-void fuse_menu()
+void fuse_menu(byte kind)
 {
-  int16_t item = menu("Fuse Menu",fusemenu, NULL, NUMELS(fusemenu), 0);
+  int16_t item = menu(rvwtitle[kind],fusemenu, NULL, NUMELS(fusemenu), 0);
   if (state == RESET_STATE) return;
   switch(item) {
-  case FUSE_PROG: program_file(FUSE_KIND); break;
-  case FUSE_SAVE: save_file(FUSE_KIND); break;
-  case FUSE_VERIFY: verify_file(FUSE_KIND); break;
-  case FUSE_DEFAULT: set_default_fuse(); break;
+  case FUSE_PROG: program(kind); break;
+  case FUSE_READ: save_file(kind); break;
+  case FUSE_VERIFY: verify(kind); break;
+  case FUSE_DEFAULT: set_default_values(kind); break;
+  default: error = NYI_ERROR; break;
   }
   if (state != RESET_STATE) state = MENU_STATE; 
 }
 
+void display_header(Color color, const char * title)
+{
+  gb.display.clear();
+  gb.display.setColor(DARKGRAY);
+  gb.display.fillRect(0, 0, gb.display.width(), 7);
+  gb.display.setColor(color);
+  gb.display.setCursor(1, 1);
+  gb.display.println(title);
+  gb.display.setColor(BLACK);
+  gb.display.drawFastHLine(0, 7, gb.display.width());
+  gb.display.println();
+  gb.display.setColor(WHITE);
+}
 
 void display_error(byte errnum)
 {
   while (1) {
     while(!gb.update());
-    if (check_OK()) return;
-    gb.display.clear();
-    gb.display.fontSize = 2;
-    gb.display.println(F("  ERROR"));
-    gb.display.fontSize = 1;
-    gb.display.println();
-    if (errnum >= NYI_ERROR && errnum <= NYI_SETTINGS) {
-      gb.display.print(F("     NYI: "));
-      gb.display.println(errnum-NYI_ERROR);
-    } else  {
-      switch (errnum) {
-      case SD_ERROR:
-	gb.display.println(F("SD-Card"));
-	gb.display.println(F("not accessible"));
-	break;
-      case STATE_ERROR:
-	gb.display.println(F("Internal"));
-	gb.display.println(F("Confusion"));
-	break;
-      case SIG_ERROR:
-	gb.display.println(F("MCU signature"));
-	gb.display.println(F("unreadable"));
-	break;
-      case UNKNOWN_SIG_ERROR:
-	gb.display.println(F("Unknown MCU"));
-	gb.display.print(F("signature:"));
-	gb.display.println(mcusig,HEX);
-	break;
-      case NO_BURN_ERROR:
-	gb.display.println(F("SD-Card does"));
-	gb.display.println(F("not contain"));
-	gb.display.println(F("BURN folder"));
-	break;
-      case NO_MEM_ERROR:
-	gb.display.println(F("Not enough"));
-	gb.display.println(F("RAM!"));
-	break;
-      default:
-	gb.display.println(F("Unknown"));
-	gb.display.print(F("Error: "));
-	gb.display.println(errnum);
-	break;
-      }
+    if (check_OK()) {
+      error = NO_ERROR;
+      state = MENU_STATE;
+      return;
+    }
+    display_header(RED, "ERROR");
+    switch (errnum) {
+    case NYI_ERROR:
+      gb.display.println(F("This function"));
+      gb.display.println(F("is not yet"));
+      gb.display.println(F("implemented!"));
+      break;
+    case SD_ERROR:
+      gb.display.println(F("SD-Card"));
+      gb.display.println(F("not accessible"));
+      break;
+    case STATE_ERROR:
+      gb.display.println(F("Internal"));
+      gb.display.println(F("Confusion"));
+      break;
+    case SIG_ERROR:
+      gb.display.println(F("MCU signature"));
+      gb.display.println(F("unreadable"));
+      break;
+    case UNKNOWN_SIG_ERROR:
+      gb.display.println(F("Unknown MCU"));
+      gb.display.print(F("signature:"));
+      gb.display.println(mcusig,HEX);
+      break;
+    case NO_MCU_ERROR:
+      gb.display.println(F("No MCU detected!"));
+      break;      
+    case NO_BURN_ERROR:
+      gb.display.println(F("SD-Card does"));
+      gb.display.println(F("not contain"));
+      gb.display.println(F("BURN folder"));
+      break;
+    case NO_MEM_ERROR:
+      gb.display.println(F("Not enough"));
+      gb.display.println(F("RAM!"));
+      break;
+    case FILE_DIR_ERROR:
+      gb.display.println(F("File is a"));
+      gb.display.println(F("directory!"));
+      break;
+    case FILE_OPEN_ERROR:
+      gb.display.println(F("Cannot open"));
+      gb.display.println(F("file!"));
+      break;
+    case HEX_FILE_ERROR:
+      gb.display.println(F("Format error"));
+      gb.display.println(F("in HEX file!"));
+      break;
+    default:
+      gb.display.println(F("Unknown"));
+      gb.display.print(F("Error: "));
+      gb.display.println(errnum);
+      break;
     }
     display_OK();
   }
@@ -299,12 +346,24 @@ void display_error(byte errnum)
 
 void display_OK()
 {
+  gb.display.setColor(DARKGRAY);
   gb.display.fillRect(gb.display.width()/2-gb.display.fontWidth-2,gb.display.height()-gb.display.fontHeight-2,2*gb.display.fontWidth+4,gb.display.fontHeight+2);
   gb.display.setColor(RED);
   gb.display.setCursor(gb.display.width()/2-gb.display.fontWidth,gb.display.height()-gb.display.fontHeight);
   gb.display.print("OK");
   gb.display.setColor(WHITE);    
 }
+
+boolean check_RST()
+{
+  if (gb.buttons.released(BUTTON_MENU)) {
+    gb.sound.playCancel();
+    state = RESET_STATE;
+    return true;
+  }
+  return false;
+}
+
 
 boolean check_OK()
 {
@@ -314,24 +373,17 @@ boolean check_OK()
     gb.sound.playOK();
     return true;
   }
-  if (gb.buttons.released(BUTTON_MENU)) {
-    gb.sound.playCancel();
-    state = RESET_STATE;
-    return true;
-  }
+  if (check_RST()) return true;
   return false;
 }
+
 
 void display_info()
 {
   while (1) {
     while(!gb.update());
     if (check_OK()) return;
-    gb.display.clear();
-    gb.display.fontSize = 2;
-    gb.display.println(F("  INFO"));
-    gb.display.fontSize = 1;
-    gb.display.println();
+    display_header(YELLOW, "Info");
     gb.display.println("Version: " VERSION);
     gb.display.print("Free RAM: ");
     gb.display.println(gb.getFreeRam());
@@ -344,133 +396,278 @@ void display_info()
 
 void mcu_detect()
 {
-  uint16_t sig;
+  uint16_t mix;
   DEBLN(F("mcu_detect"));
-  prog_mode(true);
-  sig = read_sig();
-  DEBLNF(sig,HEX);
+  mcusig = read_sig();
   DEBPR(F("sig="));
-  mcusig = sig;
-  prog_mode(false);
+  DEBLNF(mcusig,HEX);
+  mix = mcu_ix(mcusig);
+  if (error) return;
   while (1) {
     while(!gb.update());
     if (check_OK()) return;
-    gb.display.clear();
-    gb.display.fontSize = 2;
-    gb.display.println(F("    MCU"));
-    gb.display.fontSize = 1;
-    gb.display.println();
-    gb.display.println(mcu_name(mcusig));
+    display_header(YELLOW, "Detected MCU");
+    gb.display.print("MCU: ");
+    gb.display.println(mcuList[mix].name);
     display_OK();
   }
 }
 
-const char * mcu_name(uint16_t sig)
+uint16_t mcu_ix(uint16_t sig)
 {
-  DEBPR(F("mcu_name:"));
+  DEBPR(F("mcu_ix:"));
   DEBLNF(sig,HEX);
   for (int i=0; i < NUMELS(mcuList); i++) {
-    DEBPR(F("Loop: "));
-    DEBPR(i);
-    DEBPR(F(" "));
-    DEBPRF(sig,HEX);
-    DEBPR(F(" "));
-    DEBLNF(mcuList[i].signature,HEX);
     if (mcuList[i].signature  == sig) {
-      DEBLN(F("Found"));
-      mcuix = i;
-      return mcuList[i].name;
+      return i;
     }
   }
   error = UNKNOWN_SIG_ERROR;
-  return mcuList[0].name;
+  return 0;
 }
 
 void erase()
 {
-  gb.display.clear();
-  gb.display.fontSize = 2;
-  gb.display.println("Chip Erase");
-  gb.display.println();
-  gb.display.fontSize = 1;
-  gb.display.println("Proceeding ...");
+  display_header(YELLOW, "Chip Erase");
+  gb.display.println("Erasing ...");
   while (!gb.update());
   erase_chip();
   while (1) {
     while(!gb.update());
     if (check_OK()) return;
-    gb.display.clear();
-    gb.display.fontSize = 2;
-    gb.display.println(F("Chip Erase"));
-    gb.display.fontSize = 1;
-    gb.display.println();
+    display_header(YELLOW, "Chip Erase");
+    gb.display.println("Erasing ...");
     gb.display.println("Done.");
     display_OK();
   }
 }
     
-void program_file(byte kind)
+void program(byte kind)
 {
   char path[MAX_STRING_LENGTH+6] = "/BURN/";
-  uint8_t percentage = 0;
   char * filename = choose_file(false,kind);
-  boolean done = false;
+  DEBLN("program");
   if (!filename) return;
   strcat(path,filename);
   File file = SD.open(path);
+  if (!file) {
+    error = FILE_OPEN_ERROR;
+    return;
+  }
+  if (file.isDirectory()) {
+    error = FILE_DIR_ERROR;
+    return;
+  }
+  if (read_file(false, filename, file, kind) && autoverify)
+    read_file(true, filename, file, kind);
+  if (file) file.close();
+}
+
+void verify(byte kind)
+{
+  char path[MAX_STRING_LENGTH+6] = "/BURN/";
+  char * filename = choose_file(false,kind);
+  DEBLN("program");
+  if (!filename) return;
+  strcat(path,filename);
+  File file = SD.open(path);
+  if (!file) {
+    error = FILE_OPEN_ERROR;
+    return;
+  }
+  if (file.isDirectory()) {
+    error = FILE_DIR_ERROR;
+    return;
+  }
+  read_file(true, filename, file, kind);
+  if (file) file.close();
+}
+
+
+boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
+{
+  char title[MAX_STRING_LENGTH];
+  boolean done = false;
+  uint8_t percentage = 0;
+  uint16_t mix = mcu_ix(mcusig = read_sig());
+  boolean verified;
+  if (!error & mix == 0) error = NO_MCU_ERROR;
+  if (error) {
+    if (file) file.close();
+    return false;
+  }
+  strcpy(title, (doverify ? "Verifying " : " Programming "));
+  strcat(title, kindStr[kind]);
+  DEBLN("read_file");
+  file.seek(0);
   while (true) {
-    if (gb.update()) {
-      gb.display.clear();
-      gb.display.fontSize = 2;
-      gb.display.println(" Program");
-      gb.display.fontSize = 1;
-      gb.display.println();
-      gb.display.println(filename);
-      display_progress(percentage);
-      if (gb.buttons.released(BUTTON_MENU)) {
-	file.close();
-	state = RESET_STATE;
-	file.close();
-	return;
-      }
-      if (done) {
-	gb.display.println("Done!");
-	display_OK();
-	if (check_OK()) {
-	  file.close();
-	  return;
+    while (!gb.update());
+    display_header(YELLOW, title);
+    gb.display.print("File: ");
+    gb.display.println(filename);
+    display_progress(percentage);
+    if (check_RST()) {
+      file.close();
+      return false;
+    }
+    if (done) {
+      gb.display.setCursor(0,20);
+      gb.display.print((doverify ? (verified ? "Verified!" : "Deviation:") : "Programmed!"));
+      if (autoverify && !doverify) return true;
+      if (doverify && !verified) {
+	if (verifyaddr < 0) gb.display.println(verifyaddrStr[-verifyaddr]);
+	else {
+	  gb.display.print("0x");
+	  gb.display.println(verifyaddr,HEX);
 	}
+	gb.display.print("Expected: 0x");
+	gb.display.println(verifyexpected,HEX);
+	gb.display.print("Seen:     0x");
+	gb.display.println(verifyseen,HEX);
       }
-      done = prog_page(percentage);
-      if (!done) percentage++;
+      display_OK();
+      if (check_OK()) {
+	file.close();
+	return false;
+      }
+    }
+    while (!done && percent_read(file) - percentage < 2) {
+      done = (doverify ?  verify_page(file, kind, mix, verified) : prog_page(file, kind, mix));
+      DEBPR("after read_file: ");
+      DEBPR("doverify=");
+      DEBPR(doverify);
+      DEBPR(", done=");
+      DEBPR(done);
+      DEBPR(", error=");
+      DEBPR(error);
+      percentage = percent_read(file);
+      DEBPR(", %=");
+      DEBLN(percentage);
+    }
+    if (done) percentage = 100;
+    if (error) {
+      file.close();
+      return false;
     }
   }
 }
 
-void display_progress(uint8_t p) {
-  gb.display.setColor(RED);
-  gb.display.drawRect(3,40,74,8);
-  gb.display.fillRect(3,40,(int)(74*p/100),8);
-  gb.display.setColor(WHITE);
+uint32_t percent_read(File & file)
+{
+  return ((100UL*file.position())/file.size());
 }
 
-boolean prog_page(uint8_t p) {
-  delay(50);
-  DEBLN(p);
-  return (p >= 100);
+void display_progress(uint8_t p) {
+  gb.display.setColor(RED);
+  gb.display.drawRect(3,40,74,9);
+  gb.display.fillRect(3,40,(int)(74*p/100),9);
+  gb.display.setCursor(36,42);
+  gb.display.setColor(WHITE);
+  gb.display.print(p);
+  gb.display.print("%");
+  gb.display.setCursor(0,50);  
 }
+
+
+
+boolean prog_page(File & file, uint8_t kind, uint16_t mcuix) {
+  DEBLN("prog_page");
+  switch (kind) {
+  case LOCKBIT_KIND:
+    fill_page_buf(file, 1);
+    if (!error) program_lock(pagebuf[0]);
+    return true; 
+  case FUSE_KIND:
+    fill_page_buf(file, mcuList[mcuix].fuses);
+    if (!error) program_fuses(mcuList[mcuix].fuses, pagebuf[0], pagebuf[1], pagebuf[2]);
+    return true;
+  default: error = NYI_ERROR; break;
+  }
+  return true;
+}
+
+boolean verify_page(File & file, uint8_t kind, uint16_t mcuix, boolean & verified) {
+  DEBLN("verify_page");
+  switch (kind) {
+  case LOCKBIT_KIND:
+    fill_page_buf(file, 1);
+    if (!error) verified = verify_lock(pagebuf[0]);
+    return true; 
+  case FUSE_KIND:
+    fill_page_buf(file, mcuList[mcuix].fuses);
+    if (!error) verified = verify_fuses(mcuList[mcuix].fuses, pagebuf[0], pagebuf[1], pagebuf[2]);
+    return true;
+  default: error = NYI_ERROR; break;
+  }
+  return true;
+}
+
+
+void fill_page_buf(File & file, uint8_t count)
+{
+  DEBLN("fill_page_buf");
+  for (uint8_t i=0; i < count; i++) {
+    pagebuf[i] = read_hex_byte(file);
+    if (i != count-1) skip_eol(file);
+  }
+}
+
+uint8_t read_hex_byte(File & file)
+{
+  DEBLN("read_hex_byte");
+  byte b = 0;
+  b = hex_to_num(file, file.read());
+  b <<= 4;
+  b |= hex_to_num(file, file.read());
+  DEBPR("return: ");
+  DEBLNF(b,HEX);
+  return b;
+}
+
+uint8_t hex_to_num(File & file, char c)
+{
+  DEBPR("hex_to_num: pos=");
+  DEBPR(file.position());
+  DEBPR(", c=");
+  DEBLNF(c,HEX);
+  if (c >= '0' && c <= '9') 
+    return (c - '0');
+  else if (toupper(c) >= 'A' && toupper(c) <= 'F')
+    return (toupper(c) -'A' + 10);
+  else
+    error = HEX_FILE_ERROR;
+  return 0;
+}
+
+boolean skip_eol(File & file)
+{
+  DEBPR("skip_eol: pos=");
+  DEBPR(file.position());
+  DEBPR(", peek=");
+  DEBLNF(file.peek(),HEX);
+  if (file.peek() != '\n' && file.peek() != '\r') {
+    error = HEX_FILE_ERROR;
+    DEBLN("error return");
+    return false;
+  }
+  while (file.peek() == 0x0A || file.peek() == 0x0D)
+    file.read();
+  DEBPR("return: pos=");
+  DEBPR(file.position());
+  DEBPR(", peek=");
+  DEBLNF(file.peek(),HEX);
+  return true;
+}
+
 
 void save_file(byte kind)
 {
+  error = NYI_ERROR;
 }
 
-void verify_file(byte kind)
+void set_default_values(uint8_t kind)
 {
-  choose_file(true,kind);
-}
-
-void set_default_fuse()
-{
+    error = NYI_ERROR;
 }
 
 char * choose_file(boolean verify, byte kind)
@@ -528,7 +725,7 @@ void deallocate(char ** list)
   return;
 }
 
-char ** read_dir(File dir, uint8_t kind)
+char ** read_dir(File & dir, uint8_t kind)
 {
   int16_t listlen;
   int16_t ix;
@@ -573,7 +770,7 @@ boolean check_kind(char * buf, uint8_t kind)
   return (!stricmp(&buf[strlen(buf)-4],kindExt[kind]));
 }
 
-int16_t count_entries(File dir, uint8_t kind)
+int16_t count_entries(File & dir, uint8_t kind)
 {
   int16_t len = 0;
   do {

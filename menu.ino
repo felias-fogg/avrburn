@@ -90,7 +90,7 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint8
     gb.display.print(title);
     gb.display.setColor(BLACK);
     gb.display.drawFastHLine(0, 7, gb.display.width());
-    
+
     if (gb.buttons.released(BUTTON_A)) {
       gb.sound.playOK();
       if (opts && opts[cursor]) {

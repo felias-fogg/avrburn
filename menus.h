@@ -18,18 +18,17 @@
 
 // read/write/verify menu
 #define RWV_PROG 0
-#define RWV_SAVE 1
+#define RWV_READ 1
 #define RWV_VERIFY 2
 #define RWV_EXIT 3
 
 // fuse menu
 #define FUSE_PROG 0
-#define FUSE_SAVE 1
+#define FUSE_READ 1
 #define FUSE_VERIFY 2
-#define FUSE_SHOW 3
-#define FUSE_DEFAULT 4
-#define FUSE_EDIT 5
-#define FUSE_EXIT 6
+#define FUSE_DEFAULT 3
+#define FUSE_EDIT 4
+#define FUSE_EXIT 5
 
 const char * mainmenu[]  = {
   "Detect MCU", "Chip erase",  "Lock bits", "Fuses", "Flash", "EEPROM", "Settings", "Info", "Exit" };
@@ -42,10 +41,10 @@ const char * speedmenu[]  = {
   "25 kHz", "50 kHz", "100 kHz", "200 kHz", "400 kHz", "800 kHz", "Exit" };
 
 const char *  rwvmenu[]  = {
-  "Program", "Save",  "Verify",  "Exit" };
+  "Program", "Read",  "Verify",  "Exit" };
 
 const char *  rvwtitle[] = {
   "Lock Bit Menu", "Fuse Menu", "Flash Menu", "EEPROM Menu", "Exit" };
 
 const char *  fusemenu[]   = {
-  "Program", "Save",  "Verify", "Show", "Factory default", "Edit", "Exit" };
+  "Program", "Read",  "Verify", "Factory default", "Edit", "Exit" };
