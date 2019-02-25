@@ -13,15 +13,19 @@
  *    - switch from Gamebuino Classic to Gamebuino META
  *    - File choose menu for different kinds 
  *    - SPI speed adjusted
- * V0.4
+ * V0.4 (17.2.2019)
  *    - Fuses and lock bits can be programmed, and verified
  *    - Activity screens look similar to menu screens
  *    - Only one NYI error
+ * V0.5 (18.2.2019)
+ *    - Fuses and lock bits can be shown, saved, set to defaults. No editing yet.
+ *    - EEPROM and Flash can be saved to a file.
+ *    - The settings are saved on the SD card.
  */
 
-// #define DEBUG
+//#define DEBUG
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -40,6 +44,9 @@
 
 // max size of page buffer
 #define MAX_PAGE_SIZE 256
+
+// maximum number of data bytes in a line of a HEX file
+#define MAX_LINE_BYTES 16
 
 // Pins
 #define ARDU_PIN_RST 2
@@ -68,7 +75,7 @@
 
 // Error codes
 #define NO_ERROR 0
-#define STATE_ERROR 1
+#define CONFUSION_ERROR 1
 #define NYI_ERROR 2
 #define SD_ERROR 3
 #define SIG_ERROR 4
@@ -79,6 +86,8 @@
 #define FILE_DIR_ERROR 9
 #define FILE_OPEN_ERROR 10
 #define HEX_FILE_ERROR 11
+#define REMOVE_ERROR 12
+#define FILE_WRITE_ERROR 13
 
 // special verifiaction addresses
 #define VADDR_LOCK -4
@@ -96,10 +105,15 @@
 #define FUSE_SPI_SPEED SPI_SPEED0
 
 // KINDs
-#define LOCKBIT_KIND 0
+#define LOCKBITS_KIND 0
 #define FUSE_KIND 1
 #define FLASH_KIND 2
-#define EEP_KIND 3
+#define EEPROM_KIND 3
+
+// Save variables
+#define SAVE_AUTOVERIFY 0
+#define SAVE_AUTOERASE 1
+#define SAVE_SPEED_INDEX 2
 
 // timer
 #define BUSY_MS 3000UL // longest time we consider us self busy 
@@ -112,15 +126,15 @@ uint8_t state;
 uint8_t error;
 const char * kindExt[] = { ".LCK", ".FUS", ".HEX", ".EEP" };
 const char * kindStr[] = { "Lock", "Fuses", "Flash", "EEPROM" };
-int16_t settings[] = { 0, 1, 1, 0};
+int16_t settings[] = { 0, -1, -1, 0};
 boolean autoverify = true;
 boolean autoerase = true;
-int16_t speedopt[] = { -2, -2, -2, 2,  -2, -2, 0};
+int16_t speedopt[] = { -2, -2, -2, -2,  -2, -2, 0};
 uint8_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4, SPI_SPEED5 };
-uint8_t spidelay = SPI_SPEED0;
-uint8_t progspidelay = SPI_SPEED3;
+uint8_t speed_index;
+uint8_t spidelay;
+uint8_t progspidelay;
 uint16_t mcusig;
-uint16_t mcuix;
 boolean progmode = false;
 int16_t mmpos, setpos;
 char buf[MAX_STRING_LENGTH+1];
@@ -129,6 +143,11 @@ boolean verified;
 int32_t verifyaddr;
 uint8_t verifyexpected, verifyseen;
 const char * verifyaddrStr[] = { "", "Low fuse", "High fuse", "Ext. Fuse", "Lock bits" };
+const SaveDefault savefileDefaults[] = {
+  { SAVE_AUTOVERIFY, SAVETYPE_INT, 1, 0 },
+  { SAVE_AUTOERASE, SAVETYPE_INT, 1, 0 },
+  { SAVE_SPEED_INDEX, SAVETYPE_INT, 3, 0 },
+};
 
 #ifdef DEBUG
 #define DEBPR(str) SerialUSB.print(str)
@@ -146,6 +165,14 @@ const char * verifyaddrStr[] = { "", "Low fuse", "High fuse", "Ext. Fuse", "Lock
 
 void setup() {
   gb.begin();
+  gb.save.config(savefileDefaults);
+  autoverify = gb.save.get(SAVE_AUTOVERIFY);
+  if (autoverify) settings[ST_AUTOVERIFY] = 1;
+  autoerase = gb.save.get(SAVE_AUTOERASE);
+  if (autoerase) settings[ST_AUTOERASE] = 1;
+  speed_index = gb.save.get(SAVE_SPEED_INDEX);
+  speedopt[speed_index] = 2;
+  progspidelay = spidelayvals[speed_index];
 #ifdef DEBUG
   SerialUSB.begin(115200);
   while (!SerialUSB);
@@ -156,6 +183,12 @@ void setup() {
 
 void start_burner()
 {
+  uint32_t start = millis();
+  while (true) {
+    while (!gb.update());
+    display_header(BROWN, "Initializing ...");
+    if (millis() - start > 800) break;
+  }
   state = MENU_STATE;
   error = NO_ERROR;
   progmode = false;
@@ -179,12 +212,12 @@ void loop() {
     case SPEED_STATE: speed_menu(); break;
     case DETECT_STATE: mcu_detect(); break;
     case ERASE_STATE: erase(); break;
-    case LOCK_STATE: fuse_menu(LOCKBIT_KIND); break;
+    case LOCK_STATE: fuse_menu(LOCKBITS_KIND); break;
     case FLASH_STATE:rwv_menu(FLASH_KIND); break;
-    case EEP_STATE:rwv_menu(EEP_KIND); break;
+    case EEP_STATE:rwv_menu(EEPROM_KIND); break;
     case FUSE_STATE: fuse_menu(FUSE_KIND); break;
     case ERROR_STATE: display_error(error);  break;
-    default: error = STATE_ERROR; break;
+    default: error = CONFUSION_ERROR; break;
     }
   }
 }
@@ -224,40 +257,56 @@ void settings_menu()
     default: error = NYI_ERROR; break;
     }
   }
-  autoverify = (settings[ST_AUTOVERIFY] == 1);
-  autoerase = (settings[ST_AUTOERASE] == 1);
+  if (autoverify != (settings[ST_AUTOVERIFY] == 1)) {
+    autoverify = (settings[ST_AUTOVERIFY] == 1);
+    gb.save.set(SAVE_AUTOVERIFY, autoverify);
+  }
+  if (autoerase != (settings[ST_AUTOERASE] == 1)) {
+    autoerase = (settings[ST_AUTOERASE] == 1);
+    gb.save.set(SAVE_AUTOERASE, autoerase);
+  }
 }
 
 void speed_menu()
 {
   menu("Speed Menu",speedmenu, speedopt, NUMELS(speedmenu), 0);
-  for (byte i = 0; i < NUMELS(speedopt); i++)
-    if (speedopt[i] == 2) progspidelay = spidelayvals[i];
+  for (uint8_t i = 0; i < NUMELS(speedopt); i++)
+    if (speedopt[i] == 2) {
+      if (speed_index != i) {
+	progspidelay = spidelayvals[i];
+	speed_index = i;
+	gb.save.set(SAVE_SPEED_INDEX, i);
+      }
+    }
   if (state != RESET_STATE) state = SETTINGS_STATE;
 }
 
-void rwv_menu(byte kind)
+void rwv_menu(uint8_t kind)
 {
   int16_t item = menu(rvwtitle[kind],rwvmenu, NULL, NUMELS(rwvmenu), 0);
   if (state == RESET_STATE) return;
   switch(item) {
   case RWV_PROG: program(kind); break;
-  case RWV_READ: save_file(kind); break;
+  case RWV_READ: save(kind); break;
   case RWV_VERIFY: verify(kind); break;
+  case RWV_EXIT: break;
   default: error = NYI_ERROR; break;
   }
   if (state != RESET_STATE) state = MENU_STATE; 
 }
 
-void fuse_menu(byte kind)
+void fuse_menu(uint8_t kind)
 {
   int16_t item = menu(rvwtitle[kind],fusemenu, NULL, NUMELS(fusemenu), 0);
   if (state == RESET_STATE) return;
   switch(item) {
   case FUSE_PROG: program(kind); break;
-  case FUSE_READ: save_file(kind); break;
   case FUSE_VERIFY: verify(kind); break;
+  case FUSE_SHOW: show_fuses(kind); break;
+  case FUSE_READ: save(kind); break;
   case FUSE_DEFAULT: set_default_values(kind); break;
+  case FUSE_EDIT: error = NYI_ERROR; break;
+  case FUSE_EXIT: break;
   default: error = NYI_ERROR; break;
   }
   if (state != RESET_STATE) state = MENU_STATE; 
@@ -277,7 +326,7 @@ void display_header(Color color, const char * title)
   gb.display.setColor(WHITE);
 }
 
-void display_error(byte errnum)
+void display_error(uint8_t errnum)
 {
   while (1) {
     while(!gb.update());
@@ -297,7 +346,7 @@ void display_error(byte errnum)
       gb.display.println(F("SD-Card"));
       gb.display.println(F("not accessible"));
       break;
-    case STATE_ERROR:
+    case CONFUSION_ERROR:
       gb.display.println(F("Internal"));
       gb.display.println(F("Confusion"));
       break;
@@ -334,6 +383,14 @@ void display_error(byte errnum)
       gb.display.println(F("Format error"));
       gb.display.println(F("in HEX file!"));
       break;
+    case REMOVE_ERROR:
+      gb.display.println(F("Unable to remove"));
+      gb.display.println(F("file!"));
+      break;
+    case FILE_WRITE_ERROR:
+      gb.display.println(F("Error when writing"));
+      gb.display.println(F("to file!"));
+      break;      
     default:
       gb.display.println(F("Unknown"));
       gb.display.print(F("Error: "));
@@ -442,7 +499,7 @@ void erase()
   }
 }
     
-void program(byte kind)
+void program(uint8_t kind)
 {
   char path[MAX_STRING_LENGTH+6] = "/BURN/";
   char * filename = choose_file(false,kind);
@@ -463,7 +520,7 @@ void program(byte kind)
   if (file) file.close();
 }
 
-void verify(byte kind)
+void verify(uint8_t kind)
 {
   char path[MAX_STRING_LENGTH+6] = "/BURN/";
   char * filename = choose_file(false,kind);
@@ -483,6 +540,55 @@ void verify(byte kind)
   if (file) file.close();
 }
 
+void show_fuses(uint8_t kind)
+{
+  uint32_t fuses;
+  uint16_t mcuix = mcu_ix(mcusig = read_sig());
+  display_header(YELLOW, (kind == FUSE_KIND ? "Show Fuses" : "Show Lock Bits"));
+  while (!gb.update());
+  switch (kind) {
+  case FUSE_KIND:
+    fuses = read_fuses();
+    break;
+  case LOCKBITS_KIND:
+    fuses = read_lock();
+    break;
+  default: error = CONFUSION_ERROR;
+    break;
+  }
+  if (error) return;
+  while (true) {
+    while (!gb.update());
+    display_header(YELLOW, (kind == FUSE_KIND ? "Show Fuses" : "Show Lock Bits"));
+    switch (kind) {
+    case FUSE_KIND:
+      if (mcuList[mcuix].fuses == 0) {
+	gb.display.println("No fuses!");
+	break;
+      }
+      if (mcuList[mcuix].fuses >= 1) {
+	gb.display.print("Low  fuse=0x");
+	gb.display.println(fuses & 0xFF, HEX);
+      }
+      if (mcuList[mcuix].fuses >= 2) {
+	gb.display.print("High fuse=0x");
+	gb.display.println((fuses >> 8) & 0xFF, HEX);
+      }
+      if (mcuList[mcuix].fuses >= 3) {
+	gb.display.print("Ext. fuse=0x");
+	gb.display.println((fuses >> 16) & 0xFF, HEX);
+      }
+      break;
+    case LOCKBITS_KIND:
+      gb.display.print("Lockbits=0x");
+      gb.display.println(fuses & 0xFF,HEX);
+      break;
+    }
+    display_OK();
+    if (check_OK()) return;
+  }
+}
+
 
 boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
 {
@@ -490,7 +596,7 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   boolean done = false;
   uint8_t percentage = 0;
   uint16_t mix = mcu_ix(mcusig = read_sig());
-  boolean verified;
+  boolean verified = true;
   if (!error & mix == 0) error = NO_MCU_ERROR;
   if (error) {
     if (file) file.close();
@@ -503,7 +609,7 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   while (true) {
     while (!gb.update());
     display_header(YELLOW, title);
-    gb.display.print("File: ");
+    gb.display.print("File:");
     gb.display.println(filename);
     display_progress(percentage);
     if (check_RST()) {
@@ -511,27 +617,20 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
       return false;
     }
     if (done) {
-      gb.display.setCursor(0,20);
-      gb.display.print((doverify ? (verified ? "Verified!" : "Deviation:") : "Programmed!"));
       if (autoverify && !doverify) return true;
-      if (doverify && !verified) {
-	if (verifyaddr < 0) gb.display.println(verifyaddrStr[-verifyaddr]);
-	else {
-	  gb.display.print("0x");
-	  gb.display.println(verifyaddr,HEX);
-	}
-	gb.display.print("Expected: 0x");
-	gb.display.println(verifyexpected,HEX);
-	gb.display.print("Seen:     0x");
-	gb.display.println(verifyseen,HEX);
-      }
+      gb.display.setCursor(0,20);
+      if (verified) 
+	gb.display.print((doverify ? "Verified!" : "Programmed!"));
+      else 
+	show_failed_verification();
       display_OK();
       if (check_OK()) {
 	file.close();
 	return false;
       }
     }
-    while (!done && percent_read(file) - percentage < 2) {
+    if (percentage == 0) while (!gb.update());
+    while (!done && percent_read(file) - percentage < 1) {
       done = (doverify ?  verify_page(file, kind, mix, verified) : prog_page(file, kind, mix));
       DEBPR("after read_file: ");
       DEBPR("doverify=");
@@ -550,6 +649,20 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
       return false;
     }
   }
+}
+
+void show_failed_verification()
+{
+  gb.display.print("Deviation:");
+  if (verifyaddr < 0) gb.display.println(verifyaddrStr[-verifyaddr]);
+  else {
+    gb.display.print("0x");
+    gb.display.println(verifyaddr,HEX);
+  }
+  gb.display.print("Expected: 0x");
+  gb.display.println(verifyexpected,HEX);
+  gb.display.print("Seen:     0x");
+  gb.display.println(verifyseen,HEX);
 }
 
 uint32_t percent_read(File & file)
@@ -573,7 +686,7 @@ void display_progress(uint8_t p) {
 boolean prog_page(File & file, uint8_t kind, uint16_t mcuix) {
   DEBLN("prog_page");
   switch (kind) {
-  case LOCKBIT_KIND:
+  case LOCKBITS_KIND:
     fill_page_buf(file, 1);
     if (!error) program_lock(pagebuf[0]);
     return true; 
@@ -589,7 +702,7 @@ boolean prog_page(File & file, uint8_t kind, uint16_t mcuix) {
 boolean verify_page(File & file, uint8_t kind, uint16_t mcuix, boolean & verified) {
   DEBLN("verify_page");
   switch (kind) {
-  case LOCKBIT_KIND:
+  case LOCKBITS_KIND:
     fill_page_buf(file, 1);
     if (!error) verified = verify_lock(pagebuf[0]);
     return true; 
@@ -615,7 +728,7 @@ void fill_page_buf(File & file, uint8_t count)
 uint8_t read_hex_byte(File & file)
 {
   DEBLN("read_hex_byte");
-  byte b = 0;
+  uint8_t b = 0;
   b = hex_to_num(file, file.read());
   b <<= 4;
   b |= hex_to_num(file, file.read());
@@ -659,18 +772,278 @@ boolean skip_eol(File & file)
   return true;
 }
 
-
-void save_file(byte kind)
+void save(uint8_t kind)
 {
-  error = NYI_ERROR;
+  DEBLN("save");
+  char path[MAX_STRING_LENGTH+6] = "/BURN/";
+  char * filename = typein_filename(kind);
+  if (!filename) return;
+  strcat(path,filename);
+  if (SD.exists(path)) {
+    if (!overwrite_ask(filename)) return;
+    if (!SD.remove(path)) {
+      error = REMOVE_ERROR;
+      return;
+    }
+  }
+  File file = SD.open(path, FILE_WRITE);
+  if (!file) {
+    error = FILE_OPEN_ERROR;
+    return;
+  }
+  save_file(filename, file, kind);
+  if (file) file.close();
 }
+
+boolean overwrite_ask(char * filename)
+{
+  char title[20] = "Exists:";
+  const char * opts[] = { "Overwrite", "Abort" };
+  strncat(title,filename,12);
+  int8_t reply = menu(title, opts, NULL, 2, 0);
+  if (state == RESET_STATE) return false;
+  return (reply == 0);
+}
+
+char * typein_filename(uint8_t kind)
+{
+  char title[20] = "Save ";
+  strcat(title, kindStr[kind]);
+  strcat(title, " File");
+  buf[0] = '\0';
+  gb.gui.keyboard(title, buf, 20);
+  if (!buf[0]) return NULL;
+  char * dot = strchr(buf,'.');
+  if (dot) *dot = '\0';
+  strcat(buf,kindExt[kind]);
+  return buf;
+}
+
+void save_file(char * filename, File & file, uint8_t kind)
+{
+  char title[MAX_STRING_LENGTH] = "Saving ";
+  boolean done = false;
+  uint8_t percentage = 0;
+  uint32_t startaddr = 1, endaddr = 1, curraddr, lineaddr, offsetaddr = 0, offset = 0;
+  uint8_t linebuf[16];
+  uint16_t linefill = 0;
+  uint16_t mix = mcu_ix(mcusig = read_sig());
+  uint32_t fusebytes;
+  if (!error & mix == 0) error = NO_MCU_ERROR;
+  if (error) {
+    if (file) file.close();
+    return;
+  }
+  strcat(title, kindStr[kind]);
+  strcat(title, " File");
+  DEBLN("save_file");
+  switch (kind) {
+  case LOCKBITS_KIND:
+    pagebuf[1] = read_lock();
+    break;
+  case FUSE_KIND:
+    fusebytes = read_fuses();
+    pagebuf[1] = fusebytes & 0xFF;
+    pagebuf[2] = (fusebytes >> 8) & 0xFF;
+    pagebuf[3] = (fusebytes >> 16) & 0xFF;
+    endaddr = mcuList[mix].fuses;
+    break;
+  case EEPROM_KIND:
+    startaddr = 0;
+    DEBPR("mix=");
+    DEBLNF(mix,HEX);
+    endaddr = mcuList[mix].eepromSize-1;
+    DEBPR("endaddr=");
+    DEBLNF(endaddr,HEX);
+    set_prog_mode(true);
+    break;
+  case FLASH_KIND:
+    startaddr = 0;
+    endaddr = mcuList[mix].flashSize-1;
+    set_prog_mode(true);
+    break;
+  }
+  if (error) {
+    file.close();
+    return;
+  }
+  curraddr = startaddr;
+  lineaddr = startaddr;
+  percentage = 0;
+  DEBLN("save_file: start loop");
+  spidelay = progspidelay;
+  while (true) {
+    while (!gb.update());
+    display_header(YELLOW, title);
+    gb.display.print("File:");
+    gb.display.println(filename);
+    display_progress(percentage);
+    if (check_RST()) {
+      if (file) file.close();
+      return;
+    }
+    if (done) {
+      gb.display.setCursor(0,20);
+      gb.display.println("File saved!");
+      display_OK();
+      if (check_OK()) {
+	return;
+      }
+    }
+    if (percentage == 0) while (!gb.update());
+    while (curraddr <= endaddr && (100 - (100UL*(endaddr+1-curraddr)/(endaddr+1-startaddr)) - percentage < 1)) {
+      save_byte(file, kind, offset, curraddr, lineaddr, linefill, linebuf);
+    }
+    percentage = (100 - (100UL*(endaddr+1-curraddr)/(endaddr+1-startaddr)));
+    if (!done && curraddr > endaddr) {
+      done = true;
+      percentage = 100;
+      save_finish(file, kind, offset, lineaddr, linefill, linebuf);
+      if (kind == FLASH_KIND || kind == EEPROM_KIND) set_prog_mode(false);
+    }
+    if (error) {
+      if (file) file.close();
+      return;
+    }
+  }
+}
+
+void save_byte(File & file, uint8_t kind, uint32_t & offset, uint32_t & curraddr, uint32_t & lineaddr, uint16_t & linefill, uint8_t linebuf[])
+{
+  uint8_t data;
+  switch (kind) {
+  case FUSE_KIND:
+  case LOCKBITS_KIND:
+    write_hex_byte(file, pagebuf[curraddr++]);
+    file.println();
+    return;
+  case EEPROM_KIND:
+    data = read_eeprom_byte(curraddr);
+    break;
+  case FLASH_KIND:
+    data = read_flash_byte(curraddr);
+    break;
+  }
+  if (linefill == MAX_LINE_BYTES) {
+    save_data_record(file, offset, lineaddr, linefill, linebuf);
+    linefill = 0;
+    lineaddr = curraddr;
+  }
+  linebuf[linefill++] = data;
+  curraddr++;
+}
+
+void save_data_record(File & file, uint32_t & offset, uint32_t lineaddr, uint16_t linefill, uint8_t  linebuf[])
+{
+  uint8_t crc;
+  DEBPR("save_data_record: lineaddr=");
+  DEBPRF(lineaddr,HEX);
+  DEBPR(", offset=");
+  DEBPRF(offset,HEX);
+  DEBPR(", cond=");
+  DEBLN(lineaddr - offset > 0x10000UL);
+  if (lineaddr - offset > 0x10000UL) { // we need to write an extended segment address record
+    offset += 0x10000; // new offset
+    file.print(":02000002"); // 2 data bytes, base addr is 0, record type 2
+    file.print((offset>>4),HEX); // the data part is offset/16
+    crc = ~(0x02 + 0x02 + (offset >> 20)) + 1; // compute CRC
+    write_hex_byte(file, crc & 0xFF); // CRC
+    file.println();
+  }
+  boolean empty = true;
+  for (uint8_t i = 0; i < linefill; i++) 
+    if (linebuf[i] != 0xFF) empty = false;
+  if (!empty) { // if different from all 0xFF
+    file.print(":");
+    DEBPR(":");
+    write_hex_byte(file, linefill); // record length
+    crc = linefill;
+    write_hex_word(file, lineaddr-offset); // address
+    crc += ((lineaddr-offset) & 0xFF);
+    crc += (((lineaddr-offset)>>8) & 0xFF);
+    write_hex_byte(file, 0); // type = data record
+    for (uint8_t i = 0; i < linefill; i++) {
+      crc += linebuf[i];
+      write_hex_byte(file, linebuf[i]);
+    }
+    crc = (~crc + 1) & 0xFF;
+    write_hex_byte(file, crc);
+    file.println();
+    DEBLN("");
+  }
+}
+
+void save_finish(File & file, uint8_t kind, uint32_t & offset, uint32_t lineaddr, uint16_t linefill, uint8_t linebuf[])
+{
+  if (kind == FLASH_KIND || kind == EEPROM_KIND) {
+    if (linefill) save_data_record(file, offset, lineaddr, linefill, linebuf);
+    file.println(":00000001FF"); // EOF record
+    DEBLN(":00000001FF");
+  }
+  file.close();
+  return;
+}
+
+void write_hex_byte(File & file, uint8_t data)
+{
+  DEBPRF((data >> 4) & 0xF, HEX);
+  DEBPRF((data) & 0xF, HEX);
+  if (!file.print((data >> 4) & 0xF, HEX) || !file.print((data) & 0xF, HEX)) 
+    error = FILE_WRITE_ERROR;
+  return;
+}
+
+void write_hex_word(File & file, uint16_t word)
+{
+  write_hex_byte(file, (word >> 8) & 0xFF);
+  write_hex_byte(file, word  & 0xFF);
+}
+
 
 void set_default_values(uint8_t kind)
 {
-    error = NYI_ERROR;
+  uint16_t mcuix = mcu_ix(mcusig = read_sig());
+  boolean verified = true;
+  display_header(YELLOW, (kind == FUSE_KIND ? "Default Fuses" : "Default Lock Bits"));
+  while (!gb.update());
+  if (error) return;
+  switch (kind) {
+  case FUSE_KIND:
+    program_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
+    if (error) return;
+    if (autoverify) {
+      verified = verify_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
+    }
+    break;
+  case LOCKBITS_KIND:
+    program_lock(0xFF);
+    if (error) return;
+       if (autoverify) {
+	 verified = verify_lock(0xFF);
+    }
+    break;
+  }
+  while (true) {
+    if (gb.update()) {
+      display_header(YELLOW, (kind == FUSE_KIND ? "Default Fuses" : "Default Lock Bits"));
+      gb.display.println("Programmed!");
+      if (autoverify) {
+	if (verified) {
+	  gb.display.println("Verified!");
+	} else {
+	  gb.display.println("Verification failed!");
+	  show_failed_verification();
+	}
+      }
+      display_OK();
+      if (check_OK()) {
+	return;
+      }
+    }
+  }
 }
 
-char * choose_file(boolean verify, byte kind)
+char * choose_file(boolean verify, uint8_t kind)
 {
   File dir;
   int16_t item;

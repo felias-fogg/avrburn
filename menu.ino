@@ -3,7 +3,7 @@
 
 // modified menu function
 const uint8_t menuYOffset = 9;
-void myMenuDrawBox(const char* text, uint8_t i, int32_t y, int16_t optval) {
+void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int16_t optval) {
   y += i*8 + menuYOffset;
   if (y < 0 || y > 64) {
     return;
@@ -33,7 +33,7 @@ void myMenuDrawBox(const char* text, uint8_t i, int32_t y, int16_t optval) {
 
 }
 
-void myMenuDrawCursor(uint8_t i, int32_t y) {
+void myMenuDrawCursor(uint16_t i, int32_t y) {
   //	if ((gb.frameCount % 8) < 4) {
   //		return;
   //	}
@@ -42,7 +42,7 @@ void myMenuDrawCursor(uint8_t i, int32_t y) {
   gb.display.drawRect(0, y, gb.display.width(), 9);
 }
 
-int16_t menu(const char* title, const char* const * items, int16_t * opts, uint8_t length, int16_t startpos) {
+int16_t menu(const char* title, const char* const * items, int16_t * opts, uint16_t length, int16_t startpos) {
   bool reInitAsIndexed = false;
   if (gb.display.width() == 160) {
     reInitAsIndexed = true;
@@ -97,7 +97,7 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint8
 	if (opts[cursor] != 2) 
 	  opts[cursor] = -opts[cursor];
 	if (opts[cursor] == 2)
-	  for (byte i = 0; i < length; i++)
+	  for (uint16_t i = 0; i < length; i++)
 	    if (i != cursor && opts[i] == 2) opts[i] = -2;
 	continue;
       }

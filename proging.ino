@@ -37,7 +37,7 @@ uint8_t fast_soft_spi(uint8_t data)
   uint8_t result = 0;
 
   noInterrupts();
-  for (byte b=0; b < 8; b++) {
+  for (uint8_t b=0; b < 8; b++) {
     if (data&0x80) 
       setHigh(PORT_MOSI);
     else
@@ -62,7 +62,7 @@ uint8_t soft_spi(uint8_t data)
   uint8_t result = 0;
 
   noInterrupts();
-  for (byte b=0; b < 8; b++) {
+  for (uint8_t b=0; b < 8; b++) {
     if (data&0x80) 
       setHigh(PORT_MOSI);
     else
@@ -116,7 +116,7 @@ void set_prog_mode(boolean on)
 uint16_t sig_trans()
 {
   uint16_t sig;
-  byte vendorid = spi_transaction(0x30, 0x00, 0x00, 0x00) & 0xFF;
+  uint8_t vendorid = spi_transaction(0x30, 0x00, 0x00, 0x00) & 0xFF;
   if (vendorid != 0xff && vendorid != 0x00 && vendorid != 0x1E) {
     error = SIG_ERROR;
   }
@@ -255,3 +255,13 @@ boolean verify_fuses(uint8_t fusenum, uint8_t lo, uint8_t hi, uint8_t ex) {
   return true;
 }
 
+uint8_t read_eeprom_byte(uint32_t addr)
+{
+  return (spi_transaction(0xA0, addr >> 8, (addr & 0xFF), 0x00) & 0xFF);
+}
+
+
+uint8_t read_flash_byte(uint32_t addr)
+{
+  return (spi_transaction(0x20 + 8*(addr % 2), (addr >> 9) & 0xFF, (addr / 2) & 0xFF, 0x00) & 0xFF);
+}
