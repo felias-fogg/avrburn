@@ -83,8 +83,7 @@ uint8_t soft_spi(uint8_t data)
 // Programming
 void set_prog_mode(boolean on)
 {
-  spidelay = 65;
-  
+  spidelay = FUSE_SPI_SPEED;
   if (on) {
     setInput(PORT_SCK);
     setOutput(PORT_RST);
@@ -131,19 +130,15 @@ uint16_t read_sig()
 {
   uint16_t sig;
   spidelay = FUSE_SPI_SPEED;
-  set_prog_mode(true);
   sig = sig_trans();
-  set_prog_mode(false);
   return sig;
 }
 
 void erase_chip()
 {
-  set_prog_mode(true);
   spidelay = FUSE_SPI_SPEED;
   spi_transaction(0xAC, 0x80, 0, 0);
   waitForRelease();
-  set_prog_mode(false);
 }
 
 void waitForRelease()
@@ -170,7 +165,6 @@ uint32_t read_fuses()
   uint32_t fusebytes = 0;
   uint8_t fusenum;
   spidelay = FUSE_SPI_SPEED;
-  set_prog_mode(true);
   mcusig = sig_trans();
   fusenum = mcuList[mcu_ix(mcusig)].fuses;
   if (fusenum >= 3) fusebytes = spi_transaction(0x50, 0x08, 0x00, 0x00) & 0xFF; // ext
@@ -178,16 +172,13 @@ uint32_t read_fuses()
   if (fusenum >= 2) fusebytes |= (spi_transaction(0x58, 0x08, 0x00, 0x00) & 0xFF); // high
   fusebytes = (fusebytes << 8);
   if (fusenum >= 1) fusebytes  |= (spi_transaction(0x50, 0x00, 0x00, 0x00) & 0xFF); // low
-  set_prog_mode(false);
   return fusebytes;
 }
 
 void program_lock(uint8_t lock)
 {
   spidelay = FUSE_SPI_SPEED;
-  set_prog_mode(true);
   spi_transaction(0xAC, 0xE0, 0x00, lock);
-  set_prog_mode(false);
   return;
 }
 
@@ -204,12 +195,9 @@ boolean verify_lock(uint8_t lock)
 
 void program_fuses(uint8_t fusenum, uint8_t lo, uint8_t hi, uint8_t ex)
 {
-  spidelay = FUSE_SPI_SPEED;
-  set_prog_mode(true);
   if (fusenum >= 1) spi_transaction(0xAC, 0xA0, 0x00, lo);
   if (fusenum >= 2) spi_transaction(0xAC, 0xA8, 0x00, hi);
   if (fusenum >= 3) spi_transaction(0xAC, 0xA4, 0x00, ex);    
-  set_prog_mode(false);
   return;
 }
 
@@ -255,6 +243,59 @@ boolean verify_fuses(uint8_t fusenum, uint8_t lo, uint8_t hi, uint8_t ex) {
   return true;
 }
 
+boolean verify_flash(uint32_t pageaddr, uint16_t pagesize)
+{
+  return verify_mem(pageaddr, pagesize, FLASH_KIND);
+}
+
+boolean verify_eeprom(uint32_t pageaddr, uint16_t pagesize)
+{
+  return verify_mem(pageaddr, pagesize, EEPROM_KIND);
+}
+
+boolean verify_mem(uint32_t pageaddr, uint16_t pagesize, uint8_t kind)
+{
+  spidelay = progspidelay;
+  for (verifyaddr=pageaddr; verifyaddr++; verifyaddr < pageaddr+pagesize) {
+    verifyseen = (kind == FLASH_KIND ? read_flash_byte(verifyaddr) : read_eeprom_byte(verifyaddr));
+    if (verifyseen != pagebuf[verifyaddr-pageaddr]) {
+      verifyexpected = pagebuf[verifyaddr-pageaddr];
+      return false;
+    }
+  }
+  return true;
+}
+
+void program_flash(uint32_t pageaddr, uint16_t pagesize)
+{
+  boolean empty = true;
+  for (uint16_t i=0; i < pagesize; i++)
+    empty &= (pagebuf[i] == 0xFF);
+  if (empty) return;
+  spidelay = progspidelay;
+  DEBPRF(pageaddr,HEX);
+  DEBPR("  ");
+  for (uint16_t i=0; i < pagesize; i++) {
+    DEBPRF(pagebuf[i],HEX);
+    DEBPR(" ");
+  }
+  DEBLN("");
+  write_flash_page(pageaddr, pagesize);
+}
+
+void program_eeprom(uint32_t pageaddr, uint16_t pagesize)
+{
+  spidelay = progspidelay;
+  DEBPRF(pageaddr,HEX);
+  DEBPR("  ");
+  for (uint16_t i=0; i < pagesize; i++) {
+    DEBPRF(pagebuf[i],HEX);
+    DEBPR(" ");
+  }
+  DEBLN("");
+}
+
+
 uint8_t read_eeprom_byte(uint32_t addr)
 {
   return (spi_transaction(0xA0, addr >> 8, (addr & 0xFF), 0x00) & 0xFF);
@@ -264,4 +305,20 @@ uint8_t read_eeprom_byte(uint32_t addr)
 uint8_t read_flash_byte(uint32_t addr)
 {
   return (spi_transaction(0x20 + 8*(addr % 2), (addr >> 9) & 0xFF, (addr / 2) & 0xFF, 0x00) & 0xFF);
+}
+
+void write_flash_page(uint32_t addr, uint16_t size)
+{
+  for (uint16_t i=0; i < size/2; i++) {
+    spi_transaction(0x40, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i]);
+    spi_transaction(0x48, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i + 1]);
+  }
+  //convert to word address
+  addr >>= 1;
+  uint16_t reply = spi_transaction(0x4C, (addr >> 8) & 0xFF, addr & 0xFF, 0);
+  if (reply != addr) {
+    error = FLASH_PROG_ERROR;
+    return;
+  }
+  waitForRelease();
 }

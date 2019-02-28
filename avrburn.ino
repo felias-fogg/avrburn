@@ -21,14 +21,19 @@
  *    - Fuses and lock bits can be shown, saved, set to defaults. No editing yet.
  *    - EEPROM and Flash can be saved to a file.
  *    - The settings are saved on the SD card.
- * V0.6
+ * V0.6 (28.2.2019)
  *    - if EEPROM saving, then also 0xFF lines are saved (in contrast to flash memory)
- *    - programming flash
+ *    - programming mode is now enabled and disabled globally in avrburn.ino
+ *    - the info page shows now also all settings
+ *    - programming flash works
+ *    + verifying does not work yet
+ *    + dealing with word addresses > 64K (ATmega 256)
+ *    + dealing with non-page programmable devices (ATtin12 & 15)
  */
 
 #define DEBUG
 
-#define VERSION "0.6a"
+#define VERSION "0.6"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -91,6 +96,11 @@
 #define HEX_FILE_ERROR 11
 #define REMOVE_ERROR 12
 #define FILE_WRITE_ERROR 13
+#define HEX_ADDR_ERROR 14
+#define HEX_CRC_ERROR 15
+#define HEX_RECTYPE_ERROR 16
+#define FLASH_PROG_ERROR 17
+#define EEPROM_PROG_ERROR 18
 
 // special verifiaction addresses
 #define VADDR_LOCK -4
@@ -205,7 +215,7 @@ void loop() {
   if (gb.update()) {
     if (gb.buttons.pressed(BUTTON_MENU)) state = RESET_STATE;
     if (error && state != RESET_STATE) state = ERROR_STATE;
-    DEBPR(F("loop: state="));
+    DEBPR("loop: state=");
     DEBLN(state);
     switch (state) {
     case RESET_STATE: start_burner(); break;
@@ -243,7 +253,7 @@ void main_menu()
   case MM_FLASH: state = FLASH_STATE; break;
   default: error = NYI_ERROR; break;
   }
-  DEBPR(F("main_menu exit: state="));
+  DEBPR("main_menu exit: state=");
   DEBLN(state);
 }
 
@@ -341,62 +351,80 @@ void display_error(uint8_t errnum)
     display_header(RED, "ERROR");
     switch (errnum) {
     case NYI_ERROR:
-      gb.display.println(F("This function"));
-      gb.display.println(F("is not yet"));
-      gb.display.println(F("implemented!"));
+      gb.display.println("This function");
+      gb.display.println("is not yet");
+      gb.display.println("implemented!");
       break;
     case SD_ERROR:
-      gb.display.println(F("SD-Card"));
-      gb.display.println(F("not accessible"));
+      gb.display.println("SD-Card");
+      gb.display.println("not accessible");
       break;
     case CONFUSION_ERROR:
-      gb.display.println(F("Internal"));
-      gb.display.println(F("Confusion"));
+      gb.display.println("Internal");
+      gb.display.println("Confusion");
       break;
     case SIG_ERROR:
-      gb.display.println(F("MCU signature"));
-      gb.display.println(F("unreadable"));
+      gb.display.println("MCU signature");
+      gb.display.println("unreadable");
       break;
     case UNKNOWN_SIG_ERROR:
-      gb.display.println(F("Unknown MCU"));
-      gb.display.print(F("signature:"));
+      gb.display.println("Unknown MCU");
+      gb.display.print("signature:");
       gb.display.println(mcusig,HEX);
       break;
     case NO_MCU_ERROR:
-      gb.display.println(F("No MCU detected!"));
+      gb.display.println("No MCU detected!");
       break;      
     case NO_BURN_ERROR:
-      gb.display.println(F("SD-Card does"));
-      gb.display.println(F("not contain"));
-      gb.display.println(F("BURN folder"));
+      gb.display.println("SD-Card does");
+      gb.display.println("not contain");
+      gb.display.println("BURN folder");
       break;
     case NO_MEM_ERROR:
-      gb.display.println(F("Not enough"));
-      gb.display.println(F("RAM!"));
+      gb.display.println("Not enough");
+      gb.display.println("RAM!");
       break;
     case FILE_DIR_ERROR:
-      gb.display.println(F("File is a"));
-      gb.display.println(F("directory!"));
+      gb.display.println("File is a");
+      gb.display.println("directory!");
       break;
     case FILE_OPEN_ERROR:
-      gb.display.println(F("Cannot open"));
-      gb.display.println(F("file!"));
+      gb.display.println("Cannot open");
+      gb.display.println("file!");
       break;
     case HEX_FILE_ERROR:
-      gb.display.println(F("Format error"));
-      gb.display.println(F("in HEX file!"));
+      gb.display.println("Format error");
+      gb.display.println("in HEX file!");
       break;
     case REMOVE_ERROR:
-      gb.display.println(F("Unable to remove"));
-      gb.display.println(F("file!"));
+      gb.display.println("Unable to remove");
+      gb.display.println("file!");
       break;
     case FILE_WRITE_ERROR:
-      gb.display.println(F("Error when writing"));
-      gb.display.println(F("to file!"));
+      gb.display.println("Error when writing");
+      gb.display.println("to file!");
+      break;
+    case HEX_ADDR_ERROR:
+      gb.display.println("Address error in");
+      gb.display.println("HEX file!");
       break;      
+    case HEX_CRC_ERROR:
+      gb.display.println("Checksum error in");
+      gb.display.println("HEX file!");
+      break;
+    case HEX_RECTYPE_ERROR:
+      gb.display.println("Unknown record type");
+      gb.display.println("in HEX file!");
+      break;
+    case FLASH_PROG_ERROR:
+      gb.display.println("Error while");
+      gb.display.println("programming FLASH.");
+    case EEPROM_PROG_ERROR:
+      gb.display.println("Error while");
+      gb.display.println("programming EEPROM.");
     default:
-      gb.display.println(F("Unknown"));
-      gb.display.print(F("Error: "));
+      gb.display.println("Unknown");
+      gb.display.print("Error: ");
       gb.display.println(errnum);
       break;
     }
@@ -444,9 +472,15 @@ void display_info()
     while(!gb.update());
     if (check_OK()) return;
     display_header(YELLOW, "Info");
-    gb.display.println("Version: " VERSION);
+    gb.display.println("Version " VERSION);
     gb.display.print("Free RAM: ");
     gb.display.println(gb.getFreeRam());
+    gb.display.print("SPI freq.  =");
+    gb.display.println(speedmenu[speed_index]);
+    gb.display.print("Auto verify=");
+    gb.display.println((autoverify ? "on" : "off"));
+    gb.display.print("Auto erase =");
+    gb.display.println((autoerase ? "on" : "off"));
     display_OK();
   }
 }
@@ -457,9 +491,11 @@ void display_info()
 void mcu_detect()
 {
   uint16_t mix;
-  DEBLN(F("mcu_detect"));
+  DEBLN("mcu_detect");
+  set_prog_mode(true);
   mcusig = read_sig();
-  DEBPR(F("sig="));
+  set_prog_mode(false);
+  DEBPR("sig=");
   DEBLNF(mcusig,HEX);
   mix = mcu_ix(mcusig);
   if (error) return;
@@ -475,7 +511,7 @@ void mcu_detect()
 
 uint16_t mcu_ix(uint16_t sig)
 {
-  DEBPR(F("mcu_ix:"));
+  DEBPR("mcu_ix:");
   DEBLNF(sig,HEX);
   for (int i=0; i < NUMELS(mcuList); i++) {
     if (mcuList[i].signature  == sig) {
@@ -490,8 +526,10 @@ void erase()
 {
   display_header(YELLOW, "Chip Erase");
   gb.display.println("Erasing ...");
+  set_prog_mode(true);
   while (!gb.update());
   erase_chip();
+  set_prog_mode(false);
   while (1) {
     while(!gb.update());
     if (check_OK()) return;
@@ -546,9 +584,12 @@ void verify(uint8_t kind)
 void show_fuses(uint8_t kind)
 {
   uint32_t fuses;
+  set_prog_mode(true);
   uint16_t mcuix = mcu_ix(mcusig = read_sig());
+  set_prog_mode(false);
   display_header(YELLOW, (kind == FUSE_KIND ? "Show Fuses" : "Show Lock Bits"));
   while (!gb.update());
+  set_prog_mode(true);
   switch (kind) {
   case FUSE_KIND:
     fuses = read_fuses();
@@ -559,6 +600,7 @@ void show_fuses(uint8_t kind)
   default: error = CONFUSION_ERROR;
     break;
   }
+  set_prog_mode(false);
   if (error) return;
   while (true) {
     while (!gb.update());
@@ -598,37 +640,27 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   char title[MAX_STRING_LENGTH];
   boolean done = false;
   uint8_t percentage = 0;
-  uint16_t mix = mcu_ix(mcusig = read_sig());
   boolean verified = true;
-  uint32_t pageaddr = 0, curraddr = 0, lineaddr, offset = 0;
+  uint32_t pageaddr = 0, lineaddr = 0, offset = 0;
   uint16_t pagesize = 0;
   uint8_t linebuf[256];
   uint16_t linefill = 0, lix = 0;
   boolean eofreached = false;
 
   DEBLN("read_file");
+  set_prog_mode(true);
+  uint16_t mix = mcu_ix(mcusig = read_sig());
+  if (kind == FLASH_KIND && autoerase && !doverify) erase_chip();
   if (!error & mix == 0) error = NO_MCU_ERROR;
   if (error) {
     if (file) file.close();
+    set_prog_mode(false);
     return false;
   }
   strcpy(title, (doverify ? "Verifying " : " Programming "));
   strcat(title, kindStr[kind]);
   file.seek(0);
-  switch (kind) {
-  case LOCKBITS_KIND:
-    pagesize = 1;
-    break;
-  case FUSE_KIND:
-    pagesize = mcuList[mix].fuses;
-    break;
-  case FLASH_KIND:
-    pagesize = mcuList[mix].flashPS;
-    break;
-  case EEPROM_KIND:
-    pagesize = mcuList[mix].eepromPS;
-    break;
-  }
+  pagesize = determine_pagesize(kind, mix);
   while (true) {
     while (!gb.update());
     display_header(YELLOW, title);
@@ -637,43 +669,55 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
     display_progress(percentage);
     if (check_RST()) {
       file.close();
+      set_prog_mode(false);
       return false;
     }
     if (done) {
-      if (autoverify && !doverify) return true;
+      if (autoverify && !doverify) {
+	set_prog_mode(false);
+	return true;
+      }
       gb.display.setCursor(0,20);
       if (verified) 
 	gb.display.print((doverify ? "Verified!" : "Programmed!"));
       else 
 	show_failed_verification();
       display_OK();
-      if (check_OK()) {
-	file.close();
-	return false;
-      }
+      if (check_OK()) break;
     }
     if (percentage == 0) while (!gb.update());
     while (!done && percent_read(file) - percentage < 1) {
-      done = fill_next_page(file, kind, eofreached, pagesize, pageaddr, offset, curraddr, lineaddr, linefill, lix, linebuf);
+      done = fill_next_page(file, kind, eofreached, pagesize, pageaddr, offset, lineaddr, linefill, lix, linebuf);
+      DEBLN("readfile next page loop");
       if (!done) 
 	if (doverify) verify_page(file, kind, pagesize, pageaddr, verified);
 	else prog_page(file, kind, pagesize, pageaddr);
-      DEBPR("after read_file: ");
-      DEBPR("doverify=");
-      DEBPR(doverify);
-      DEBPR(", done=");
-      DEBPR(done);
-      DEBPR(", error=");
-      DEBPR(error);
-      percentage = percent_read(file);
-      DEBPR(", %=");
-      DEBLN(percentage);
+      pageaddr += pagesize;
     }
+    percentage = percent_read(file);
+    // DEBLN("read_file update loop");
     if (done) percentage = 100;
-    if (error) {
-      file.close();
-      return false;
-    }
+    if (error) break;
+  }
+  set_prog_mode(false);
+  if (file) file.close();
+  return false;
+}
+
+uint16_t determine_pagesize(uint8_t kind, uint16_t mcuix)
+{
+  switch (kind) {
+  case LOCKBITS_KIND:
+    return 1;
+  case FUSE_KIND:
+    return mcuList[mcuix].fuses;
+  case FLASH_KIND:
+    return mcuList[mcuix].flashPS;
+  case EEPROM_KIND:
+    return mcuList[mcuix].eepromPS;
+  default:
+    error = CONFUSION_ERROR;
+    return 1;
   }
 }
 
@@ -709,36 +753,47 @@ void display_progress(uint8_t p) {
 
 
 
-boolean prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) {
+void prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) {
   DEBLN("prog_page");
   switch (kind) {
   case LOCKBITS_KIND:
     program_lock(pagebuf[0]);
-    return true; 
+    break; 
   case FUSE_KIND:
     program_fuses(pagesize, pagebuf[0], pagebuf[1], pagebuf[2]);
-    return true;
-  default: error = NYI_ERROR; break;
+    break;
+  case FLASH_KIND:
+    program_flash(pageaddr, pagesize);
+    break;
+  case EEPROM_KIND:
+    program_eeprom(pageaddr, pagesize);
+    break;
+  default: error = CONFUSION_ERROR;
+    break;
   }
-  return true;
 }
 
-boolean verify_page(File & file, uint8_t kind,  uint16_t pagesize, uint32_t pageaddr, boolean & verified) {
+void verify_page(File & file, uint8_t kind,  uint16_t pagesize, uint32_t pageaddr, boolean & verified) {
   DEBLN("verify_page");
   switch (kind) {
   case LOCKBITS_KIND:
     verified = verify_lock(pagebuf[0]);
-    return true; 
+    break;
   case FUSE_KIND:
     verified = verify_fuses(pagesize, pagebuf[0], pagebuf[1], pagebuf[2]);
-    return true;
-  default: error = NYI_ERROR; break;
+    break;
+  case FLASH_KIND:
+    verified = verify_flash(pageaddr, pagesize);
+    break;
+  case EEPROM_KIND:
+    verified = verify_eeprom(pageaddr, pagesize);
+    break;
+  default: error = CONFUSION_ERROR; break;
   }
-  return true;
 }
 
 
-boolean fill_next_page(File & file,  uint8_t kind, boolean & eofreached, uint16_t pagesize, uint32_t & pageaddr, uint32_t & offset, uint32_t & curraddr, uint32_t & lineaddr, uint16_t & linefill, uint16_t & lix, uint8_t linebuf[])
+boolean fill_next_page(File & file,  uint8_t kind, boolean & eofreached, uint16_t pagesize, uint32_t & pageaddr, uint32_t & offset, uint32_t & lineaddr, uint16_t & linefill, uint16_t & lix, uint8_t linebuf[])
 {
   DEBLN("fill_next_page");
   if (eofreached) return true;
@@ -749,30 +804,105 @@ boolean fill_next_page(File & file,  uint8_t kind, boolean & eofreached, uint16_
     }
     eofreached = true;
     return false;
-  }
+  } else {
   // flash and eeprom
-  error = NYI_ERROR;
-  return true;
+    for (uint16_t i=0; i < pagesize; i++) pagebuf[i] = 0xFF;
+    do {
+      if (lix == linefill) {
+	fill_next_line(file, kind, eofreached, offset, lineaddr, linefill, linebuf);
+	lix = 0;
+	if (eofreached) return false;
+      }
+      if (lineaddr+lix < pageaddr) {
+	DEBLN("HEX ADDR ERROR");
+	error = HEX_ADDR_ERROR;
+	return true;
+      }
+      if (error || eofreached) return false;
+      DEBLN("fill_next_page before fill loop");
+      DEBPR("  lineaddr=");
+      DEBLNF(lineaddr,HEX);
+      DEBPR("       lix=");
+      DEBLN(lix);
+      DEBPR("  pageaddr=");
+      DEBLNF(pageaddr,HEX);
+      DEBPR("  pagesize=");
+      DEBLN(pagesize);
+      while (lineaddr + lix < pageaddr + pagesize && lix < linefill) {
+	pagebuf[lineaddr - pageaddr + lix] = linebuf[lix++];
+      }
+    } while (lineaddr + lix < pageaddr + pagesize);
+    return false;
+  }
 }
+
+void fill_next_line(File & file, uint8_t kind, boolean & eofreached, uint32_t & offset, uint32_t & lineaddr, uint16_t & linefill, uint8_t linebuf[])
+{
+  uint8_t rectype;
+  uint16_t recaddr;
+  do {
+    rectype = read_record(file, recaddr, linefill, linebuf);
+    if (!error && rectype > 2) error = HEX_RECTYPE_ERROR;
+    if (error) return;
+    eofreached = (rectype == 1);
+    if (rectype == 2) offset = (linebuf[0] << 12) + (linebuf[1] << 4);
+  } while (rectype == 2);
+  lineaddr = offset + recaddr;
+}
+
+uint8_t read_record(File & file, uint16_t & recaddr, uint16_t & linefill, uint8_t linebuf[])
+{
+  uint8_t b1, b2;
+  if (file.read() != ':') error = HEX_FILE_ERROR;
+  linefill = read_hex_byte(file);
+  uint8_t crc = linefill;
+  b1 = read_hex_byte(file);
+  crc += b1;
+  b2 += read_hex_byte(file);
+  crc += b2;
+  recaddr = (b1<<8) + b2;
+  uint8_t rectype = read_hex_byte(file);
+  crc += rectype;
+  for (uint8_t i=0; i< linefill; i++) {
+    linebuf[i] = read_hex_byte(file);
+    crc += linebuf[i];
+  }
+  crc += read_hex_byte(file);
+  if (!error && crc != 0) error = HEX_CRC_ERROR;
+  skip_eol(file);
+#ifdef DEBUG
+  DEBLN("read_record:");
+  DEBPR("  type=");
+  DEBLN(rectype);
+  DEBPR("  len =");
+  DEBLN(linefill);
+  DEBPR("  addr=");
+  DEBLNF(recaddr,HEX);
+  DEBPR("  line=");
+  for (uint16_t j=0; j < linefill; j++) {
+    DEBPRF(linebuf[j],HEX);
+    DEBPR(" ");
+  }
+  DEBLN("");
+#endif
+  return rectype;
+}
+
+		 
 
 uint8_t read_hex_byte(File & file)
 {
-  DEBLN("read_hex_byte");
   uint8_t b = 0;
   b = hex_to_num(file, file.read());
   b <<= 4;
   b |= hex_to_num(file, file.read());
-  DEBPR("return: ");
-  DEBLNF(b,HEX);
+  //DEBPR("read_hex_byte: ");
+  //DEBLNF(b,HEX);
   return b;
 }
 
 uint8_t hex_to_num(File & file, char c)
 {
-  DEBPR("hex_to_num: pos=");
-  DEBPR(file.position());
-  DEBPR(", c=");
-  DEBLNF(c,HEX);
   if (c >= '0' && c <= '9') 
     return (c - '0');
   else if (toupper(c) >= 'A' && toupper(c) <= 'F')
@@ -784,21 +914,12 @@ uint8_t hex_to_num(File & file, char c)
 
 boolean skip_eol(File & file)
 {
-  DEBPR("skip_eol: pos=");
-  DEBPR(file.position());
-  DEBPR(", peek=");
-  DEBLNF(file.peek(),HEX);
   if (file.peek() != '\n' && file.peek() != '\r') {
-    error = HEX_FILE_ERROR;
-    DEBLN("error return");
+    if (!error) error = HEX_FILE_ERROR;
     return false;
   }
   while (file.peek() == 0x0A || file.peek() == 0x0D)
     file.read();
-  DEBPR("return: pos=");
-  DEBPR(file.position());
-  DEBPR(", peek=");
-  DEBLNF(file.peek(),HEX);
   return true;
 }
 
@@ -857,11 +978,14 @@ void save_file(char * filename, File & file, uint8_t kind)
   uint32_t startaddr = 1, endaddr = 1, curraddr, lineaddr, offsetaddr = 0, offset = 0;
   uint8_t linebuf[16];
   uint16_t linefill = 0;
-  uint16_t mix = mcu_ix(mcusig = read_sig());
   uint32_t fusebytes;
+
+  set_prog_mode(true);
+  uint16_t mix = mcu_ix(mcusig = read_sig());
   if (!error & mix == 0) error = NO_MCU_ERROR;
   if (error) {
     if (file) file.close();
+    set_prog_mode(false);
     return;
   }
   strcat(title, kindStr[kind]);
@@ -885,16 +1009,15 @@ void save_file(char * filename, File & file, uint8_t kind)
     endaddr = mcuList[mix].eepromSize-1;
     DEBPR("endaddr=");
     DEBLNF(endaddr,HEX);
-    set_prog_mode(true);
     break;
   case FLASH_KIND:
     startaddr = 0;
     endaddr = mcuList[mix].flashSize-1;
-    set_prog_mode(true);
     break;
   }
   if (error) {
     file.close();
+    set_prog_mode(false);
     return;
   }
   curraddr = startaddr;
@@ -933,6 +1056,7 @@ void save_file(char * filename, File & file, uint8_t kind)
     }
     if (error) {
       if (file) file.close();
+      set_prog_mode(false);
       return;
     }
   }
@@ -1033,22 +1157,27 @@ void write_hex_word(File & file, uint16_t word)
 
 void set_default_values(uint8_t kind)
 {
-  uint16_t mcuix = mcu_ix(mcusig = read_sig());
   boolean verified = true;
+
+  set_prog_mode(true);
+  uint16_t mcuix = mcu_ix(mcusig = read_sig());
   display_header(YELLOW, (kind == FUSE_KIND ? "Default Fuses" : "Default Lock Bits"));
   while (!gb.update());
-  if (error) return;
+  if (error) {
+    set_prog_mode(false);
+    return;
+  }
   switch (kind) {
   case FUSE_KIND:
     program_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
-    if (error) return;
+    if (error) break;
     if (autoverify) {
       verified = verify_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
     }
     break;
   case LOCKBITS_KIND:
     program_lock(0xFF);
-    if (error) return;
+    if (error) break;
        if (autoverify) {
 	 verified = verify_lock(0xFF);
     }
@@ -1068,10 +1197,11 @@ void set_default_values(uint8_t kind)
       }
       display_OK();
       if (check_OK()) {
-	return;
+	break;
       }
     }
   }
+  set_prog_mode(false);
 }
 
 char * choose_file(boolean verify, uint8_t kind)
@@ -1084,7 +1214,7 @@ char * choose_file(boolean verify, uint8_t kind)
   const char * strVerify = "Verify ";
   const char * strRead = "Program ";
   char * strNoFile = "-- No File --";
-  DEBLN(F("choose_file"));
+  DEBLN("choose_file");
   if (error == NO_ERROR) {
     dir = SD.open("/BURN");
     if (!dir || !(dir.isDirectory())) {
