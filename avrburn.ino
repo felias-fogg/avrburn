@@ -21,11 +21,14 @@
  *    - Fuses and lock bits can be shown, saved, set to defaults. No editing yet.
  *    - EEPROM and Flash can be saved to a file.
  *    - The settings are saved on the SD card.
+ * V0.6
+ *    - if EEPROM saving, then also 0xFF lines are saved (in contrast to flash memory)
+ *    - programming flash
  */
 
-//#define DEBUG
+#define DEBUG
 
-#define VERSION "0.5"
+#define VERSION "0.6a"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -597,6 +600,13 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   uint8_t percentage = 0;
   uint16_t mix = mcu_ix(mcusig = read_sig());
   boolean verified = true;
+  uint32_t pageaddr = 0, curraddr = 0, lineaddr, offset = 0;
+  uint16_t pagesize = 0;
+  uint8_t linebuf[256];
+  uint16_t linefill = 0, lix = 0;
+  boolean eofreached = false;
+
+  DEBLN("read_file");
   if (!error & mix == 0) error = NO_MCU_ERROR;
   if (error) {
     if (file) file.close();
@@ -604,8 +614,21 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   }
   strcpy(title, (doverify ? "Verifying " : " Programming "));
   strcat(title, kindStr[kind]);
-  DEBLN("read_file");
   file.seek(0);
+  switch (kind) {
+  case LOCKBITS_KIND:
+    pagesize = 1;
+    break;
+  case FUSE_KIND:
+    pagesize = mcuList[mix].fuses;
+    break;
+  case FLASH_KIND:
+    pagesize = mcuList[mix].flashPS;
+    break;
+  case EEPROM_KIND:
+    pagesize = mcuList[mix].eepromPS;
+    break;
+  }
   while (true) {
     while (!gb.update());
     display_header(YELLOW, title);
@@ -631,7 +654,10 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
     }
     if (percentage == 0) while (!gb.update());
     while (!done && percent_read(file) - percentage < 1) {
-      done = (doverify ?  verify_page(file, kind, mix, verified) : prog_page(file, kind, mix));
+      done = fill_next_page(file, kind, eofreached, pagesize, pageaddr, offset, curraddr, lineaddr, linefill, lix, linebuf);
+      if (!done) 
+	if (doverify) verify_page(file, kind, pagesize, pageaddr, verified);
+	else prog_page(file, kind, pagesize, pageaddr);
       DEBPR("after read_file: ");
       DEBPR("doverify=");
       DEBPR(doverify);
@@ -683,32 +709,28 @@ void display_progress(uint8_t p) {
 
 
 
-boolean prog_page(File & file, uint8_t kind, uint16_t mcuix) {
+boolean prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) {
   DEBLN("prog_page");
   switch (kind) {
   case LOCKBITS_KIND:
-    fill_page_buf(file, 1);
-    if (!error) program_lock(pagebuf[0]);
+    program_lock(pagebuf[0]);
     return true; 
   case FUSE_KIND:
-    fill_page_buf(file, mcuList[mcuix].fuses);
-    if (!error) program_fuses(mcuList[mcuix].fuses, pagebuf[0], pagebuf[1], pagebuf[2]);
+    program_fuses(pagesize, pagebuf[0], pagebuf[1], pagebuf[2]);
     return true;
   default: error = NYI_ERROR; break;
   }
   return true;
 }
 
-boolean verify_page(File & file, uint8_t kind, uint16_t mcuix, boolean & verified) {
+boolean verify_page(File & file, uint8_t kind,  uint16_t pagesize, uint32_t pageaddr, boolean & verified) {
   DEBLN("verify_page");
   switch (kind) {
   case LOCKBITS_KIND:
-    fill_page_buf(file, 1);
-    if (!error) verified = verify_lock(pagebuf[0]);
+    verified = verify_lock(pagebuf[0]);
     return true; 
   case FUSE_KIND:
-    fill_page_buf(file, mcuList[mcuix].fuses);
-    if (!error) verified = verify_fuses(mcuList[mcuix].fuses, pagebuf[0], pagebuf[1], pagebuf[2]);
+    verified = verify_fuses(pagesize, pagebuf[0], pagebuf[1], pagebuf[2]);
     return true;
   default: error = NYI_ERROR; break;
   }
@@ -716,13 +738,21 @@ boolean verify_page(File & file, uint8_t kind, uint16_t mcuix, boolean & verifie
 }
 
 
-void fill_page_buf(File & file, uint8_t count)
+boolean fill_next_page(File & file,  uint8_t kind, boolean & eofreached, uint16_t pagesize, uint32_t & pageaddr, uint32_t & offset, uint32_t & curraddr, uint32_t & lineaddr, uint16_t & linefill, uint16_t & lix, uint8_t linebuf[])
 {
-  DEBLN("fill_page_buf");
-  for (uint8_t i=0; i < count; i++) {
-    pagebuf[i] = read_hex_byte(file);
-    if (i != count-1) skip_eol(file);
+  DEBLN("fill_next_page");
+  if (eofreached) return true;
+  if (kind == LOCKBITS_KIND || kind == FUSE_KIND) {
+    for (uint8_t i=0; i < pagesize; i++) {
+      pagebuf[i] = read_hex_byte(file);
+      if (i != pagesize-1) skip_eol(file);
+    }
+    eofreached = true;
+    return false;
   }
+  // flash and eeprom
+  error = NYI_ERROR;
+  return true;
 }
 
 uint8_t read_hex_byte(File & file)
@@ -925,7 +955,7 @@ void save_byte(File & file, uint8_t kind, uint32_t & offset, uint32_t & curraddr
     break;
   }
   if (linefill == MAX_LINE_BYTES) {
-    save_data_record(file, offset, lineaddr, linefill, linebuf);
+    save_data_record(file, kind, offset, lineaddr, linefill, linebuf);
     linefill = 0;
     lineaddr = curraddr;
   }
@@ -933,7 +963,7 @@ void save_byte(File & file, uint8_t kind, uint32_t & offset, uint32_t & curraddr
   curraddr++;
 }
 
-void save_data_record(File & file, uint32_t & offset, uint32_t lineaddr, uint16_t linefill, uint8_t  linebuf[])
+void save_data_record(File & file, uint8_t kind, uint32_t & offset, uint32_t lineaddr, uint16_t linefill, uint8_t  linebuf[])
 {
   uint8_t crc;
   DEBPR("save_data_record: lineaddr=");
@@ -953,6 +983,7 @@ void save_data_record(File & file, uint32_t & offset, uint32_t lineaddr, uint16_
   boolean empty = true;
   for (uint8_t i = 0; i < linefill; i++) 
     if (linebuf[i] != 0xFF) empty = false;
+  if (kind == EEPROM_KIND) empty = false;
   if (!empty) { // if different from all 0xFF
     file.print(":");
     DEBPR(":");
@@ -976,7 +1007,7 @@ void save_data_record(File & file, uint32_t & offset, uint32_t lineaddr, uint16_
 void save_finish(File & file, uint8_t kind, uint32_t & offset, uint32_t lineaddr, uint16_t linefill, uint8_t linebuf[])
 {
   if (kind == FLASH_KIND || kind == EEPROM_KIND) {
-    if (linefill) save_data_record(file, offset, lineaddr, linefill, linebuf);
+    if (linefill) save_data_record(file, kind, offset, lineaddr, linefill, linebuf);
     file.println(":00000001FF"); // EOF record
     DEBLN(":00000001FF");
   }
