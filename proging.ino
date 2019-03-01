@@ -98,6 +98,7 @@ void set_prog_mode(boolean on)
     spi_transaction(0xAC, 0x53, 0x00, 0x00);
     delay(11);
     progmode = true;
+    check_extended_addr(0);
   } else {
     setLow(PORT_SCK);
     setInput(PORT_SCK);
@@ -134,14 +135,15 @@ uint16_t read_sig()
   return sig;
 }
 
-void erase_chip()
+void erase_chip(uint16_t mix)
 {
   spidelay = FUSE_SPI_SPEED;
   spi_transaction(0xAC, 0x80, 0, 0);
-  waitForRelease();
+  if (mcuList[mix].erasePoll) wait_for_completion();
+  else delay(mcuList[mix].eraseDelay);
 }
 
-void waitForRelease()
+void wait_for_completion()
 {
   uint32_t start = millis();
   uint8_t busy = 1;
@@ -255,9 +257,20 @@ boolean verify_eeprom(uint32_t pageaddr, uint16_t pagesize)
 
 boolean verify_mem(uint32_t pageaddr, uint16_t pagesize, uint8_t kind)
 {
+  DEBLN("verify_mem");
+  DEBPR("  pageaddr=");
+  DEBLNF(pageaddr,HEX);
+  DEBPR("  pagesize=");
+  DEBLNF(pagesize,HEX);
   spidelay = progspidelay;
-  for (verifyaddr=pageaddr; verifyaddr++; verifyaddr < pageaddr+pagesize) {
+  for (verifyaddr=pageaddr;  verifyaddr < pageaddr+pagesize; verifyaddr++) {
     verifyseen = (kind == FLASH_KIND ? read_flash_byte(verifyaddr) : read_eeprom_byte(verifyaddr));
+    DEBPR("VERIFY: addr=");
+    DEBPRF(verifyaddr,HEX);
+    DEBPR(" seen=");
+    DEBPRF(verifyseen,HEX);
+    DEBPR(" expct=");
+    DEBLNF(pagebuf[verifyaddr-pageaddr],HEX);
     if (verifyseen != pagebuf[verifyaddr-pageaddr]) {
       verifyexpected = pagebuf[verifyaddr-pageaddr];
       return false;
@@ -266,33 +279,69 @@ boolean verify_mem(uint32_t pageaddr, uint16_t pagesize, uint8_t kind)
   return true;
 }
 
-void program_flash(uint32_t pageaddr, uint16_t pagesize)
+
+void program_flash(uint32_t pageaddr, uint16_t pagesize, uint8_t polling, uint8_t wait_ms)
 {
   boolean empty = true;
+  uint16_t reply;
   for (uint16_t i=0; i < pagesize; i++)
     empty &= (pagebuf[i] == 0xFF);
   if (empty) return;
   spidelay = progspidelay;
-  DEBPRF(pageaddr,HEX);
-  DEBPR("  ");
-  for (uint16_t i=0; i < pagesize; i++) {
-    DEBPRF(pagebuf[i],HEX);
-    DEBPR(" ");
+  if (pagesize > 1) { // real page programming
+    for (uint16_t i=0; i < pagesize/2; i++) {
+      spi_transaction(0x40, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i]);
+      spi_transaction(0x48, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i + 1]);
+    }
+    //convert to word address
+    check_extended_addr(pageaddr);
+    pageaddr >>= 1;
+    reply = spi_transaction(0x4C, (pageaddr >> 8) & 0xFF, pageaddr & 0xFF, 0);
+    if (reply != pageaddr) {
+      error = FLASH_PROG_ERROR;
+      return;
+    }
+  } else { // byte programming
+    spi_transaction(0x40 + (pageaddr%2)*8, (pageaddr >> 9) & 0xFF, (pageaddr >> 1) & 0xFF,  pagebuf[0]);
   }
-  DEBLN("");
-  write_flash_page(pageaddr, pagesize);
+  if (polling == 0) wait_for_completion(); // usual busy polling
+  else {
+    uint16_t pollix = 0; 
+    while (pagebuf[pollix] == 0xFF && pollix < pagesize) pollix++; // find entry different from 0xFF
+    if (pollix >= pagesize) delay(wait_ms); // if there is no one, just delay
+    else {
+      uint32_t start = millis(); // otherwise wait for programmed value to show up
+      while (pagebuf[pollix] != read_flash_byte(pageaddr + pollix) && (millis() - start <= wait_ms)) delayMicroseconds(50);
+    }
+  }
 }
 
-void program_eeprom(uint32_t pageaddr, uint16_t pagesize)
+void program_eeprom(uint32_t pageaddr, uint16_t pagesize, uint8_t polling, uint8_t wait_ms)
 {
+  uint16_t reply;
   spidelay = progspidelay;
-  DEBPRF(pageaddr,HEX);
-  DEBPR("  ");
-  for (uint16_t i=0; i < pagesize; i++) {
-    DEBPRF(pagebuf[i],HEX);
-    DEBPR(" ");
+  if (pagesize > 1) { // real page programming
+    for (uint16_t i=0; i < pagesize; i++) {
+      spi_transaction(0xC1, 0, i & 0xFF,  pagebuf[i]);
+    }
+    reply = spi_transaction(0xC2, (pageaddr >> 8) & 0xFF, pageaddr & 0xFF, 0);
+    if (reply != pageaddr) {
+      error = EEPROM_PROG_ERROR;
+      return;
+    }
+  } else { // byte programming
+    spi_transaction(0xC0, (pageaddr >> 8) & 0xFF, pageaddr  & 0xFF,  pagebuf[0]);
   }
-  DEBLN("");
+  if (polling == 0) wait_for_completion(); // usual busy polling
+  else {
+    uint16_t pollix = 0; 
+    while (pagebuf[pollix] == 0xFF && pollix < pagesize) pollix++; // find entry different from 0xFF
+    if (pollix >= pagesize) delay(wait_ms); // if there is no one, just delay
+    else {
+      uint32_t start = millis(); // otherwise wait for programmed value to show up
+      while (pagebuf[pollix] != read_flash_byte(pageaddr + pollix) && (millis() - start <= wait_ms)) delayMicroseconds(50);
+    }
+  }
 }
 
 
@@ -304,21 +353,18 @@ uint8_t read_eeprom_byte(uint32_t addr)
 
 uint8_t read_flash_byte(uint32_t addr)
 {
+  check_extended_addr(addr);
   return (spi_transaction(0x20 + 8*(addr % 2), (addr >> 9) & 0xFF, (addr / 2) & 0xFF, 0x00) & 0xFF);
 }
 
-void write_flash_page(uint32_t addr, uint16_t size)
+// checks whether extended (word) adressing is necessary
+// if so, issues the correct SPI command
+// (only necessary for ATmega 256)
+void check_extended_addr(uint32_t addr)
 {
-  for (uint16_t i=0; i < size/2; i++) {
-    spi_transaction(0x40, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i]);
-    spi_transaction(0x48, (i >> 8) & 0xFF, i & 0xFF,  pagebuf[2 * i + 1]);
+  static uint8_t extendedAddr = 0;
+  if (extendedAddr != ((addr >> 17) & 0xFF)) {
+    extendedAddr = (addr >> 17) & 0xFF;
+    spi_transaction(0x4D, 0, extendedAddr, 0);
   }
-  //convert to word address
-  addr >>= 1;
-  uint16_t reply = spi_transaction(0x4C, (addr >> 8) & 0xFF, addr & 0xFF, 0);
-  if (reply != addr) {
-    error = FLASH_PROG_ERROR;
-    return;
-  }
-  waitForRelease();
 }

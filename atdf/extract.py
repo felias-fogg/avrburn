@@ -5,8 +5,9 @@ import sys
 import re
 
 if len(sys.argv) != 2:
-	print 'Usage: build_signatures.py <path to AVR Studio devices directory>'
-	sys.exit(1)
+    print 'Usage: extract.py <path to AVR Studio devices directory with atdf files>'
+    print 'Generates mcus.h for avrburn' 
+    sys.exit(1)
 
 atmel_location = sys.argv[1]
 
@@ -35,8 +36,16 @@ def process_atdf(path):
             else: high = "00";
             extended = re.search('name="EXTENDED"[^>]*?initval="0x(.*?)"',s)
             if (extended): extended = extended.group(1)
-            else: extended = "00";
-            all = all + [(name, sig, fusesz, low, high, extended, flashsz, flashps, eepsz, eepps)]
+            else: extended = "00"
+            epoll = re.search('name="IspChipErase_pollMethod" value="(.*?)"',s).group(1)
+            edelay = re.search('name="IspChipErase_eraseDelay" value="(.*?)"',s).group(1)
+            fmode = re.search('name="IspProgramFlash_cmd2" value="(.*?)"',s).group(1)
+            fdelay = re.search('name="IspProgramFlash_delay" value="(.*?)"',s).group(1)
+            fpoll = re.search('IspProgramFlash_pollVal1" value="(.*?)"',s).group(1)
+            eemode = re.search('name="IspProgramEeprom_cmd2" value="(.*?)"',s).group(1)
+            eedelay = re.search('name="IspProgramEeprom_delay" value="(.*?)"',s).group(1)
+            eepoll = re.search('name="IspProgramEeprom_pollVal1" value="(.*?)"',s).group(1)
+            all = all + [(name, sig, fusesz, low, high, extended, epoll, edelay, flashsz, flashps, fmode, fdelay, fpoll, eepsz, eepps, eemode, eedelay, eepoll)]
 
 for filename in os.listdir(atmel_location):
     if filename.endswith(".atdf"):
@@ -47,24 +56,29 @@ all.sort()
 
 print('typedef struct mcuItem')
 print('{')
-print('   uint16_t name;')
+print('   const char name[32];')
 print('   uint16_t signature;')
 print('   uint8_t fuses;')
 print('   uint8_t lowFuse;')
 print('   uint8_t highFuse;')
 print('   uint8_t extendedFuse;')
+print('   boolean erasePoll;')
+print('   uint8_t eraseDelay;')
 print('   uint32_t flashSize;')
 print('   uint16_t flashPS;')
+print('   uint8_t flashMode;')
+print('   uint8_t flashDelay;')
+print('   uint8_t flashPoll;')
 print('   uint16_t eepromSize;')
 print('   uint8_t eepromPS;')
+print('   uint8_t eepromMode;')
+print('   uint8_t eepromDelay;')
+print('   uint8_t eepromPoll;')
 print('} mcuItem;\n')
-print 'const char strNull[] PROGMEM = "No MCU";'
-for el in all:
-    print 'const char str%s[] PROGMEM = "%s";' % (el[0], el[0]);
 print('')
-print('static const mcuItem mcuList[] PROGMEM =')
+print('static const mcuItem mcuList[] =')
 print('{')
-print('   { (uint16_t)strNull, 0, 0, 0, 0, 0, 0, 0, 0, 0},')
+print('   { "No MCU", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},')
 for el in all:
-    print('   { (uint16_t)str%s, 0x%s, %s, 0x%s, 0x%s, 0x%s, 0x%sL, 0x%s, 0x%s, 0x%s },' % el)
+    print('   { "%s", 0x%s, %s, 0x%s, 0x%s, 0x%s, %s, %s, 0x%sL, 0x%s, %s, %s, %s, 0x%s, 0x%s, %s, %s, %s },' % el)
 print('};')

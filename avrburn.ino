@@ -26,14 +26,17 @@
  *    - programming mode is now enabled and disabled globally in avrburn.ino
  *    - the info page shows now also all settings
  *    - programming flash works
- *    + verifying does not work yet
- *    + dealing with word addresses > 64K (ATmega 256)
- *    + dealing with non-page programmable devices (ATtin12 & 15)
+ * V0.7
+ *    - verifying flash works now
+ *    - extended addressing for Mega256 implemented
+ *    - erase and programming busy wait & wait implemented
+ *    - eeprom programming for paged MCUs works!
+ *    + attiny15 eeprom programming affects flash!
  */
 
 #define DEBUG
 
-#define VERSION "0.6"
+#define VERSION "0.7c"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -129,7 +132,7 @@
 #define SAVE_SPEED_INDEX 2
 
 // timer
-#define BUSY_MS 3000UL // longest time we consider us self busy 
+#define BUSY_MS 200U // longest time we consider us busy 
 
 
 #define NO_BTN 255
@@ -524,11 +527,17 @@ uint16_t mcu_ix(uint16_t sig)
 
 void erase()
 {
+  uint16_t mix;
   display_header(YELLOW, "Chip Erase");
   gb.display.println("Erasing ...");
   set_prog_mode(true);
+  mix = mcu_ix(read_sig());
+  if (error) {
+    set_prog_mode(false);
+    return;
+  }
   while (!gb.update());
-  erase_chip();
+  erase_chip(mix);
   set_prog_mode(false);
   while (1) {
     while(!gb.update());
@@ -646,11 +655,13 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   uint8_t linebuf[256];
   uint16_t linefill = 0, lix = 0;
   boolean eofreached = false;
+  uint8_t polling = 0;
+  uint8_t wait_ms = 0;
 
   DEBLN("read_file");
   set_prog_mode(true);
   uint16_t mix = mcu_ix(mcusig = read_sig());
-  if (kind == FLASH_KIND && autoerase && !doverify) erase_chip();
+  if (kind == FLASH_KIND && autoerase && !doverify) erase_chip(mix);
   if (!error & mix == 0) error = NO_MCU_ERROR;
   if (error) {
     if (file) file.close();
@@ -661,6 +672,8 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
   strcat(title, kindStr[kind]);
   file.seek(0);
   pagesize = determine_pagesize(kind, mix);
+  polling = determine_polling(kind, mix);
+  wait_ms = determine_wait(kind, mix);
   while (true) {
     while (!gb.update());
     display_header(YELLOW, title);
@@ -691,7 +704,8 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
       DEBLN("readfile next page loop");
       if (!done) 
 	if (doverify) verify_page(file, kind, pagesize, pageaddr, verified);
-	else prog_page(file, kind, pagesize, pageaddr);
+	else prog_page(file, kind, pagesize, pageaddr, polling, wait_ms);
+      if (!verified) done = true;
       pageaddr += pagesize;
     }
     percentage = percent_read(file);
@@ -712,14 +726,35 @@ uint16_t determine_pagesize(uint8_t kind, uint16_t mcuix)
   case FUSE_KIND:
     return mcuList[mcuix].fuses;
   case FLASH_KIND:
-    return mcuList[mcuix].flashPS;
+    if (mcuList[mcuix].flashMode == 0x4C)
+      return mcuList[mcuix].flashPS;
+    else
+      return 1; // only byte programmable, no pages!
   case EEPROM_KIND:
-    return mcuList[mcuix].eepromPS;
+    if (mcuList[mcuix].flashMode == 0xC2)
+      return mcuList[mcuix].eepromPS;
+    else
+      return 1; // only byte programmable
   default:
     error = CONFUSION_ERROR;
     return 1;
   }
 }
+
+uint8_t determine_polling(uint8_t kind, uint16_t mcuix)
+{
+  if (kind == FLASH_KIND) return mcuList[mcuix].flashPoll;
+  else if  (kind == EEPROM_KIND) return mcuList[mcuix].eepromPoll;
+  else return 0;
+}
+
+uint8_t determine_wait(uint8_t kind, uint16_t mcuix)
+{
+  if (kind == FLASH_KIND) return mcuList[mcuix].flashDelay;
+  else if  (kind == EEPROM_KIND) return mcuList[mcuix].eepromDelay;
+  else return 0;
+}
+
 
 void show_failed_verification()
 {
@@ -753,7 +788,7 @@ void display_progress(uint8_t p) {
 
 
 
-void prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) {
+void prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr, uint8_t polling, uint8_t wait_ms) {
   DEBLN("prog_page");
   switch (kind) {
   case LOCKBITS_KIND:
@@ -763,10 +798,10 @@ void prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) 
     program_fuses(pagesize, pagebuf[0], pagebuf[1], pagebuf[2]);
     break;
   case FLASH_KIND:
-    program_flash(pageaddr, pagesize);
+    program_flash(pageaddr, pagesize, polling, wait_ms);
     break;
   case EEPROM_KIND:
-    program_eeprom(pageaddr, pagesize);
+    program_eeprom(pageaddr, pagesize, polling, wait_ms);
     break;
   default: error = CONFUSION_ERROR;
     break;
@@ -775,6 +810,10 @@ void prog_page(File & file, uint8_t kind, uint16_t pagesize, uint32_t pageaddr) 
 
 void verify_page(File & file, uint8_t kind,  uint16_t pagesize, uint32_t pageaddr, boolean & verified) {
   DEBLN("verify_page");
+  DEBPR("  pageaddr=");
+  DEBLNF(pageaddr,HEX);
+  DEBPR("  pagesize=");
+  DEBLNF(pagesize,HEX);
   switch (kind) {
   case LOCKBITS_KIND:
     verified = verify_lock(pagebuf[0]);
