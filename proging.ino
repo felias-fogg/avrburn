@@ -297,7 +297,7 @@ void program_flash(uint32_t pageaddr, uint16_t pagesize, uint8_t polling, uint8_
     check_extended_addr(pageaddr);
     pageaddr >>= 1;
     reply = spi_transaction(0x4C, (pageaddr >> 8) & 0xFF, pageaddr & 0xFF, 0);
-    if (reply != pageaddr) {
+    if (reply != (pageaddr & 0xFFFF)) {
       error = FLASH_PROG_ERROR;
       return;
     }
@@ -330,6 +330,10 @@ void program_eeprom(uint32_t pageaddr, uint16_t pagesize, uint8_t polling, uint8
       return;
     }
   } else { // byte programming
+    DEBPR("EEPROM prog addr=");
+    DEBPRF(pageaddr,HEX);
+    DEBPR(", byte=");
+    DEBLNF(pagebuf[0],HEX);
     spi_transaction(0xC0, (pageaddr >> 8) & 0xFF, pageaddr  & 0xFF,  pagebuf[0]);
   }
   if (polling == 0) wait_for_completion(); // usual busy polling
@@ -339,7 +343,7 @@ void program_eeprom(uint32_t pageaddr, uint16_t pagesize, uint8_t polling, uint8
     if (pollix >= pagesize) delay(wait_ms); // if there is no one, just delay
     else {
       uint32_t start = millis(); // otherwise wait for programmed value to show up
-      while (pagebuf[pollix] != read_flash_byte(pageaddr + pollix) && (millis() - start <= wait_ms)) delayMicroseconds(50);
+      while (pagebuf[pollix] != read_eeprom_byte(pageaddr + pollix) && (millis() - start <= wait_ms)) delayMicroseconds(50);
     }
   }
 }
@@ -364,6 +368,8 @@ void check_extended_addr(uint32_t addr)
 {
   static uint8_t extendedAddr = 0;
   if (extendedAddr != ((addr >> 17) & 0xFF)) {
+    DEBPR("extended address: ");
+    DEBLNF((addr >> 17) & 0xFF,HEX);
     extendedAddr = (addr >> 17) & 0xFF;
     spi_transaction(0x4D, 0, extendedAddr, 0);
   }

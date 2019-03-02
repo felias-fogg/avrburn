@@ -1,11 +1,11 @@
 // Menu result codes
 // main menu
 #define MM_DETECT 0
-#define MM_ERASE 1
-#define MM_LOCK 2
+#define MM_FLASH 1
+#define MM_EEP 2
 #define MM_FUSE 3
-#define MM_FLASH 4
-#define MM_EEP 5
+#define MM_LOCK 4
+#define MM_ERASE 5
 #define MM_SETTINGS 6
 #define MM_INFO 7
 #define MM_EXIT 8
@@ -32,7 +32,7 @@
 #define FUSE_EXIT 6
 
 const char * mainmenu[]  = {
-  "Detect MCU", "Chip erase",  "Lock bits", "Fuses", "Flash", "EEPROM", "Settings", "Info", "Exit" };
+  "Detect MCU",  "Flash", "EEPROM",  "Fuses",  "Lock bits", "Chip erase", "Settings", "Info", "Restart" };
 
 const char * settingsmenu[]  = {
   "SPI Speed", "Auto Verify", "Auto Erase", "Exit" };
@@ -49,3 +49,6 @@ const char *  rvwtitle[] = {
 
 const char *  fusemenu[]   = {
   "Program", "Verify", "Show", "Read & Save", "Factory default", "Edit", "Exit" };
+
+const char *  lockmenu[]   = {
+  "Program", "Verify", "Show", "Read & Save", "Chip&lockbits erase", "Edit", "Exit" };
