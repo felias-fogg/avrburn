@@ -39,7 +39,7 @@ const char * settingsmenu[]  = {
 
 
 const char * speedmenu[]  = {
-  "25 kHz", "50 kHz", "100 kHz", "200 kHz", "400 kHz", "800 kHz", "Exit" };
+  "10 kHz", "20 kHz", "50 kHz", "100 kHz", "200 kHz", "400 kHz", "600 kHz", "Exit" };
 
 const char *  rwvmenu[]  = {
   "Program",  "Verify",  "Read & Save", "Exit" };

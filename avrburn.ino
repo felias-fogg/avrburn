@@ -41,13 +41,15 @@
  *    - Yes/No question before chip erase 
  *    - Similar question for file overwrite
  *    - use B as exit button (menus, left-or-right, choose file)
+ * V0.8
+ *    - SPI bit banging checked again with scope. Now Speed from 10 kHz to 600 kHz
  */
 
 /* Tested with: ATtiny12, ATtiny13, ATtiny84, ATtiny85, ATtiny167, ATtiny2313, ATmega8, ATmega328, ATmega328P, ATMega1284P, ATmega2560 */
 
 // #define DEBUG
 
-#define VERSION "0.7"
+#define VERSION "0.8"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -124,12 +126,13 @@
 #define VADDR_EX -3
 
 // software spi speed
-#define SPI_SPEED0 65 // 25 kHz
-#define SPI_SPEED1 30 // 50 kHz
-#define SPI_SPEED2 13 // 100 kHz
-#define SPI_SPEED3 5 //  200 kHz
-#define SPI_SPEED4 1 //  400 kHz
-#define SPI_SPEED5 0 //  800 kHz
+#define SPI_SPEED0 335 //  10 kHz
+#define SPI_SPEED1 165 //  20 kHz
+#define SPI_SPEED2 64  //  50 kHz
+#define SPI_SPEED3 30  // 100 kHz
+#define SPI_SPEED4 13  // 200 kHz
+#define SPI_SPEED5 4   // 400 kHz
+#define SPI_SPEED6 1   // 600 kHz
 #define FUSE_SPI_SPEED SPI_SPEED0
 
 // KINDs
@@ -157,11 +160,11 @@ const char * kindStr[] = { "Lock", "Fuses", "Flash", "EEPROM" };
 int16_t settings[] = { 0, -1, -1, 0};
 boolean autoverify = true;
 boolean autoerase = true;
-int16_t speedopt[] = { -2, -2, -2, -2,  -2, -2, 0};
-uint8_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4, SPI_SPEED5 };
+int16_t speedopt[] = { -2, -2, -2, -2,  -2, -2, -2, 0};
+uint16_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4, SPI_SPEED5, SPI_SPEED6 };
 uint8_t speed_index;
-uint8_t spidelay;
-uint8_t progspidelay;
+uint16_t spidelay;
+uint16_t progspidelay;
 uint16_t mcusig;
 boolean progmode = false;
 int16_t mmpos, setpos, rwvpos, fusepos;

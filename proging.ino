@@ -12,55 +12,26 @@
 
 uint32_t spi_transaction(uint8_t a,uint8_t b,uint8_t c,uint8_t d)
 {
+  spidelay = 1;
   uint32_t result;
-  if (spidelay == 0) {
-    result = fast_soft_spi(a);
-    result = (result<<8) | fast_soft_spi(b);
-    result = (result<<8) | fast_soft_spi(c);
-    result = (result<<8) | fast_soft_spi(d);
-  } else {
-    result = soft_spi(a);
-    result = (result<<8) | soft_spi(b);
-    result = (result<<8) | soft_spi(c);
-    result = (result<<8) | soft_spi(d);
-  }
+  result = soft_spi(a);
+  result = (result<<8) | soft_spi(b);
+  result = (result<<8) | soft_spi(c);
+  result = (result<<8) | soft_spi(d);
   return result;
 }
 
-void soft_delay(uint8_t wait)
+inline void soft_delay(uint16_t wait)
 {
-  for (uint8_t i = 0; i < wait; i++) asm("nop");
+  for (uint16_t i = 0; i < wait; i++) asm("nop");
 }
 
-uint8_t fast_soft_spi(uint8_t data)
-{
-  uint8_t result = 0;
-
-  noInterrupts();
-  for (uint8_t b=0; b < 8; b++) {
-    if (data&0x80) 
-      setHigh(PORT_MOSI);
-    else
-      setLow(PORT_MOSI);
-    data <<= 1;
-    result <<= 1;
-    setHigh(PORT_SCK);
-    asm("nop");
-    asm("nop");
-    asm("nop");
-    asm("nop");
-    asm("nop");
-    if (getInput(PORT_MISO)) result |= 1;
-    setLow(PORT_SCK);
-  }
-  interrupts();
-  return result;
-}
 
 uint8_t soft_spi(uint8_t data)
 {
   uint8_t result = 0;
 
+  spidelay = 1;
   noInterrupts();
   for (uint8_t b=0; b < 8; b++) {
     if (data&0x80) 
@@ -72,9 +43,8 @@ uint8_t soft_spi(uint8_t data)
     setHigh(PORT_SCK);
     soft_delay(spidelay);
     if (getInput(PORT_MISO)) result |= 1;
-    soft_delay(spidelay-1);
     setLow(PORT_SCK);
-    soft_delay(spidelay*2-1);
+    soft_delay(spidelay-1);
   }
   interrupts();
   return result;
