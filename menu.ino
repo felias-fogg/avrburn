@@ -1,9 +1,11 @@
 // -*- c++ -*-
 
 
-// modified menu function
+// Parts of the code below has been taken from the Gambuino Meta library, which has been publishe dunder LGPL
+
 const uint8_t menuYOffset = 9;
-void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int16_t optval) {
+
+void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int8_t optval) {
   y += i*8 + menuYOffset;
   if (y < 0 || y > 64) {
     return;
@@ -29,8 +31,6 @@ void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int16_t optval) {
       break;
     }
   }
-
-
 }
 
 void myMenuDrawCursor(uint16_t i, int32_t y) {
@@ -43,13 +43,6 @@ void myMenuDrawCursor(uint16_t i, int32_t y) {
 }
 
 int16_t menu(const char* title, const char* const * items, int16_t * opts, uint16_t length, int16_t startpos) {
-  bool reInitAsIndexed = false;
-  if (gb.display.width() == 160) {
-    reInitAsIndexed = true;
-    gb.display.init(80, 64, ColorMode::rgb565);
-  }
-  uint8_t fontSizeBak = gb.display.fontSize;
-  gb.display.setFontSize(1);
   
   int16_t cursor = 0;
   int32_t cameraY = 0;
@@ -69,14 +62,15 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
   while(1) {
     while(!gb.update());
     gb.display.clear();
-    
+    gb.display.setTextWrap(false);
+
     cameraY_actual = (cameraY_actual + cameraY) / 2;
     if (cameraY_actual - cameraY == 1) {
       cameraY_actual = cameraY;
     }
     
     for (uint8_t i = 0; i < length; i++) {
-      int16_t optval = (opts ? opts[i] : 0);
+      int8_t optval = (opts ? opts[i] : 0);
       myMenuDrawBox(items[i], i, cameraY_actual, optval);
     }
     
@@ -142,12 +136,126 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
       gb.sound.playTick();
     }
   }
-  if (reInitAsIndexed) {
-    gb.display.init(160, 128, ColorMode::index);
-  }
-  gb.display.setFontSize(fontSizeBak);
   return cursor;
 }
+
+
+uint32_t fuse_menu(char title[], fuseItems list[], uint16_t length, uint32_t initial)
+{
+  
+  int16_t cursor = 0;
+  int32_t cameraY = 0;
+  int32_t cameraY_actual = 0;
+  uint8_t buf[4];
+
+  for (uint8_t i=0; i<4; i++) {
+    buf[i] = initial & 0xFF;
+    initial >>= 8;
+  }
+  
+  while(1) {
+    while(!gb.update());
+    gb.display.clear();
+    gb.display.setTextWrap(false);
+
+    cameraY_actual = (cameraY_actual + cameraY) / 2;
+    if (cameraY_actual - cameraY == 1) {
+      cameraY_actual = cameraY;
+    }
+    
+    for (uint8_t i = 0; i < length; i++) 
+      myMenuDrawBox(list[i].fieldname, i, cameraY_actual, optval(list, length, i, buf));
+    
+    myMenuDrawCursor(cursor, cameraY_actual);
+    
+    // last draw the top entry thing
+    gb.display.setColor(DARKGRAY);
+    gb.display.fillRect(0, 0, gb.display.width(), 7);
+    gb.display.setColor(GREEN);
+    gb.display.setCursor(1, 1);
+    gb.display.print(title);
+    gb.display.setColor(BLACK);
+    gb.display.drawFastHLine(0, 7, gb.display.width());
+
+    if (gb.buttons.released(BUTTON_A)) {
+      gb.sound.playOK();
+      if (list[cursor].mask == 0) return new_value(buf);
+      change_value(list, length, cursor, buf);
+    }
+
+    if (gb.buttons.released(BUTTON_B)) {
+      gb.sound.playTick();
+      return new_value(buf);
+    }
+    
+    if (gb.buttons.released(BUTTON_MENU)) {
+      gb.sound.playCancel();
+      state = RESET_STATE;
+      return -1;
+    }
+
+    if (gb.buttons.repeat(BUTTON_UP, 4)) {
+      if (cursor == 0) {
+	cursor = length - 1;
+	if (length > 6) {
+	  cameraY = -(cursor-5)*8;
+	}
+      } else {
+	cursor--;
+	if (cursor > 0 && (cursor*8 + cameraY + menuYOffset) < 14) {
+	  cameraY += 8;
+	}
+      }
+      gb.sound.playTick();
+    }
+    
+    if (gb.buttons.repeat(BUTTON_DOWN, 4)) {
+      cursor++;
+      if ((cursor*8 + cameraY + menuYOffset) > 54) {
+	cameraY -= 8;
+      }
+      if (cursor >= length) {
+	cursor = 0;
+	cameraY = 0;
+      }
+      gb.sound.playTick();
+    }
+  }
+  return -1;
+}
+
+int8_t optval(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+{
+  int8_t marker = 1;
+  for (uint16_t i=0; i < length; i++)
+    if (i != ix && list[i].mask == list[ix].mask && list[i].addr == list[ix].addr) marker = 2;
+  if ((list[ix].mask & buf[list[ix].addr]) != list[ix].value) marker = -marker;
+  return marker;
+}
+
+void change_value(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+{
+  int8_t marker = optval(list, length, ix, buf);
+  switch (marker) {
+  case 2: break;
+  case -2: buf[list[ix].addr] = (buf[list[ix].addr] & ~list[ix].mask) | list[ix].value; break;
+  case 1: buf[list[ix].addr] |= list[ix].mask; break;
+  case -1: buf[list[ix].addr] &= ~list[ix].mask; break;
+  }
+}
+
+
+uint32_t new_value(uint8_t buf[4])
+{
+  uint32_t value = 0;
+  for (uint8_t i=0; i < 4; i++) {
+    value |= buf[3-i];
+    value <<= 8;
+  }
+  return value;
+}
+
+
 
 boolean left_or_right(const char * title, const char * question, const char * left, const char * right, boolean leftpos)
 {
@@ -160,7 +268,8 @@ boolean left_or_right(const char * title, const char * question, const char * le
   while (1) {
     while(!gb.update());
     gb.display.clear();
-    
+    gb.display.setTextWrap(false);
+
     gb.display.setColor(DARKGRAY);
     gb.display.fillRect(0, 0, gb.display.width(), 7);
     gb.display.setColor(RED);
@@ -323,13 +432,6 @@ char keyboardGetChar(int8_t x, int8_t y, const char* layout) {
 }
 
 void keyboard(const char* title, char* text, uint8_t length) {
-	bool reInitAsIndexed = false;
-	if (gb.display.width() == 160) {
-		reInitAsIndexed = true;
-		gb.display.init(80, 64, ColorMode::rgb565);
-	}
-	uint8_t fontSizeBak = gb.display.fontSize;
-	gb.display.setFontSize(1);
 	
 	gb.display.fill(BLACK);
 	gb.display.setColor(DARKGRAY);
@@ -440,8 +542,4 @@ void keyboard(const char* title, char* text, uint8_t length) {
 		gb.display.setColor(WHITE);
 		gb.display.drawFastHLine(activeChar*4 + 1, 19, 3);
 	}
-	if (reInitAsIndexed) {
-		gb.display.init(160, 128, ColorMode::index);
-	}
-	gb.display.setFontSize(fontSizeBak);
 }

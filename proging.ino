@@ -12,7 +12,6 @@
 
 uint32_t spi_transaction(uint8_t a,uint8_t b,uint8_t c,uint8_t d)
 {
-  spidelay = 1;
   uint32_t result;
   result = soft_spi(a);
   result = (result<<8) | soft_spi(b);
@@ -31,7 +30,6 @@ uint8_t soft_spi(uint8_t data)
 {
   uint8_t result = 0;
 
-  spidelay = 1;
   noInterrupts();
   for (uint8_t b=0; b < 8; b++) {
     if (data&0x80) 
@@ -53,6 +51,8 @@ uint8_t soft_spi(uint8_t data)
 // Programming
 void set_prog_mode(boolean on)
 {
+  DEBPR("set_prog_mode: ");
+  DEBLN(on);
   spidelay = FUSE_SPI_SPEED;
   if (on) {
     setInput(PORT_SCK);
@@ -89,6 +89,7 @@ uint16_t sig_trans()
   uint8_t vendorid = spi_transaction(0x30, 0x00, 0x00, 0x00) & 0xFF;
   if (vendorid != 0xff && vendorid != 0x00 && vendorid != 0x1E) {
     error = SIG_ERROR;
+    DEBLN("SIGNATURE ERROR");
   }
   sig = spi_transaction(0x30, 0x00, 0x01, 0x00) & 0xFF;
   sig <<= 8;
@@ -102,6 +103,8 @@ uint16_t read_sig()
   uint16_t sig;
   spidelay = FUSE_SPI_SPEED;
   sig = sig_trans();
+  DEBPR("Signature read:");
+  DEBLNF(sig,HEX);
   return sig;
 }
 
@@ -134,16 +137,25 @@ uint8_t read_lock()
 
 uint32_t read_fuses()
 {
+  spidelay = FUSE_SPI_SPEED;
   uint32_t fusebytes = 0;
   uint8_t fusenum;
-  spidelay = FUSE_SPI_SPEED;
-  mcusig = sig_trans();
+  DEBLN("read_fuses");
+  uint16_t mcusig = read_sig();
+  DEBLN(mcusig);
   fusenum = mcuList[mcu_ix(mcusig)].fuses;
+  DEBLN(fusenum);
   if (fusenum >= 3) fusebytes = spi_transaction(0x50, 0x08, 0x00, 0x00) & 0xFF; // ext
+  DEBPR("read ext: ");
+  DEBLNF(fusebytes,HEX);
   fusebytes = (fusebytes << 8);
   if (fusenum >= 2) fusebytes |= (spi_transaction(0x58, 0x08, 0x00, 0x00) & 0xFF); // high
+  DEBPR("read high: ");
+  DEBLNF(fusebytes,HEX);
   fusebytes = (fusebytes << 8);
   if (fusenum >= 1) fusebytes  |= (spi_transaction(0x50, 0x00, 0x00, 0x00) & 0xFF); // low
+  DEBPR("read lo: ");
+  DEBLNF(fusebytes,HEX);
   return fusebytes;
 }
 
@@ -167,6 +179,8 @@ boolean verify_lock(uint8_t lock)
 
 void program_fuses(uint8_t fusenum, uint8_t lo, uint8_t hi, uint8_t ex)
 {
+  DEBPR("program_fuses: ");
+  DEBLNF(lo+(hi<<8)+(ex<<16),HEX);
   if (fusenum >= 1) spi_transaction(0xAC, 0xA0, 0x00, lo);
   if (fusenum >= 2) spi_transaction(0xAC, 0xA8, 0x00, hi);
   if (fusenum >= 3) spi_transaction(0xAC, 0xA4, 0x00, ex);    

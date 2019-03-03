@@ -41,21 +41,27 @@
  *    - Yes/No question before chip erase 
  *    - Similar question for file overwrite
  *    - use B as exit button (menus, left-or-right, choose file)
- * V0.8
+ * V0.8 (2.3.2019)
  *    - SPI bit banging checked again with scope. Now Speed from 10 kHz to 600 kHz
+ * V0.9
+ *    - SPI speed settings in spi stransaction corrected
+ *    - Verification after setting default values for fuses fixed: needs a restart programming mode
+ *    - disabling text wrap after each clear!
+ *    
  */
 
 /* Tested with: ATtiny12, ATtiny13, ATtiny84, ATtiny85, ATtiny167, ATtiny2313, ATmega8, ATmega328, ATmega328P, ATMega1284P, ATmega2560 */
 
-// #define DEBUG
+#define DEBUG
 
-#define VERSION "0.8"
+#define VERSION "0.9b"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
 #include <string.h>
 #include "mcus.h"
 #include "menus.h"
+#include "fuses.h"
 
 // number of els
 #define NUMELS(x) (sizeof(x)/sizeof(x[0]))
@@ -351,7 +357,7 @@ void fuse_menu(uint8_t kind)
     if (kind == FUSE_KIND) set_default_fuses();
     else erase(false);
     break;
-  case FUSE_EDIT: error = NYI_ERROR; break;
+  case FUSE_EDIT: fuse_edit(); break;
   case -1:
   case FUSE_EXIT: state = MENU_STATE; break;
   default: error = NYI_ERROR; break;
@@ -363,6 +369,7 @@ void fuse_menu(uint8_t kind)
 void display_header(Color color, const char * title)
 {
   gb.display.clear();
+  gb.display.setTextWrap(false);
   gb.display.setColor(DARKGRAY);
   gb.display.fillRect(0, 0, gb.display.width(), 7);
   gb.display.setColor(color);
@@ -738,7 +745,7 @@ boolean read_file(boolean doverify, char * filename, File & file, uint8_t kind)
 	set_prog_mode(false);
 	return true;
       }
-      gb.display.setCursor(0,30);
+      gb.display.setCursor(0,20);
       gb.display.setColor(WHITE,BLACK);
       if (verified) 
 	gb.display.print((doverify ? "Verified!" : "Programmed!"));
@@ -1148,7 +1155,7 @@ void save_file(char * filename, File & file, uint8_t kind)
     }
     if (done) {
       gb.display.setColor(WHITE, BLACK);
-      gb.display.setCursor(0,30);
+      gb.display.setCursor(0,20);
       gb.display.println("File saved!");
       display_OK();
       if (check_OK()) {
@@ -1280,6 +1287,8 @@ void set_default_fuses()
     return;
   }
   program_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
+  set_prog_mode(false);
+  set_prog_mode(true);
   if (!error) { 
     if (autoverify) {
       verified = verify_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
@@ -1423,3 +1432,9 @@ int16_t count_entries(File & dir, uint8_t kind)
   dir.rewindDirectory();
   return len;
 }  
+
+
+void fuse_edit()
+{
+  error = NYI_ERROR;
+}
