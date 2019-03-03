@@ -47,6 +47,7 @@
  *    - SPI speed settings in spi stransaction corrected
  *    - Verification after setting default values for fuses fixed: needs a restart programming mode
  *    - disabling text wrap after each clear!
+ *    - DEBUG deactivated!
  *    
  */
 
@@ -54,7 +55,7 @@
 
 #define DEBUG
 
-#define VERSION "0.9b"
+#define VERSION "0.9d"
 
 #include <Gamebuino-Meta.h>
 #include <stdio.h>
@@ -124,6 +125,7 @@
 #define FLASH_PROG_ERROR 17
 #define EEPROM_PROG_ERROR 18
 #define MAX_ADDR_ERROR 19
+#define NO_FUSE_INFO_ERROR 20
 
 // special verifiaction addresses
 #define VADDR_LOCK -4
@@ -468,8 +470,15 @@ void display_error(uint8_t errnum)
       break;
     case MAX_ADDR_ERROR:
       gb.display.println("Trying to program");
-      gb.display.println("a memory cell with");
-      gb.display.println("addr out of bound.");
+      gb.display.println("or verify a memory");
+      gb.display.println("cell with addr out");
+      gb.display.println("of bound.");
+      break;            
+    case NO_FUSE_INFO_ERROR:
+      gb.display.println("For this MCU there");
+      gb.display.println("is nothing known");
+      gb.display.println("about the fuse");
+      gb.display.println("definitions.");
       break;            
     default:
       gb.display.println("Unknown");
@@ -1437,4 +1446,26 @@ int16_t count_entries(File & dir, uint8_t kind)
 void fuse_edit()
 {
   error = NYI_ERROR;
+  return;
+  
+  uint16_t fix = 0;
+  uint32_t newfuses, fuses;
+  set_prog_mode(true);
+  uint16_t mcusig = read_sig();
+  if (!error) {
+    fuses = read_fuses();
+  }
+  set_prog_mode(false);
+  if (error) return;
+  for (uint16_t i=0; i < NUMELS(fuseMenuList); i++) 
+    if (fuseMenuList[i].sig == mcusig) fix = i;
+  if (fix == 0) {
+    error = NO_FUSE_INFO_ERROR;
+    return;
+  }
+  DEBPR("fuse_edit before: ");
+  DEBLNF(fuses,HEX);
+  newfuses = fuses_edit_menu("Edit fuses", fuseMenuList[fix].fuseList, NUMELS(fuseMenuList[fix].fuseList), fuses);
+  DEBPR("fuse_edit after: ");
+  DEBLNF(newfuses,HEX);
 }

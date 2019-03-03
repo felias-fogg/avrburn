@@ -140,7 +140,7 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
 }
 
 
-uint32_t fuse_menu(char title[], fuseItems list[], uint16_t length, uint32_t initial)
+uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint16_t length, uint32_t initial)
 {
   
   int16_t cursor = 0;
@@ -164,7 +164,7 @@ uint32_t fuse_menu(char title[], fuseItems list[], uint16_t length, uint32_t ini
     }
     
     for (uint8_t i = 0; i < length; i++) 
-      myMenuDrawBox(list[i].fieldname, i, cameraY_actual, optval(list, length, i, buf));
+      myMenuDrawBox(fuseProps[list[i].mes], i, cameraY_actual, optval(list, length, i, buf));
     
     myMenuDrawCursor(cursor, cameraY_actual);
     
@@ -224,7 +224,7 @@ uint32_t fuse_menu(char title[], fuseItems list[], uint16_t length, uint32_t ini
   return -1;
 }
 
-int8_t optval(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+int8_t optval(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
 {
   int8_t marker = 1;
   for (uint16_t i=0; i < length; i++)
@@ -233,7 +233,7 @@ int8_t optval(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4])
   return marker;
 }
 
-void change_value(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+void change_value(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
 {
   int8_t marker = optval(list, length, ix, buf);
   switch (marker) {
@@ -247,12 +247,7 @@ void change_value(fuseItems list[], uint16_t length, uint16_t ix, uint8_t buf[4]
 
 uint32_t new_value(uint8_t buf[4])
 {
-  uint32_t value = 0;
-  for (uint8_t i=0; i < 4; i++) {
-    value |= buf[3-i];
-    value <<= 8;
-  }
-  return value;
+  return (uint32_t)((buf[3]<<24)+(buf[2]<<16)+(buf[1]<<8)+buf[0]);
 }
 
 

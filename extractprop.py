@@ -5,7 +5,7 @@ import sys
 import re
 
 if len(sys.argv) != 2:
-    print 'Usage: extract.py <path to AVR Studio devices directory with atdf files>'
+    print 'Usage: extractprop.py <path to AVR Studio devices directory with atdf files>'
     print 'Generates mcus.h for avrburn' 
     sys.exit(1)
 
