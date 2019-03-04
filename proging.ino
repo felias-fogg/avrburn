@@ -182,7 +182,9 @@ void program_fuses(uint8_t fusenum, uint8_t lo, uint8_t hi, uint8_t ex)
   DEBPR("program_fuses: ");
   DEBLNF(lo+(hi<<8)+(ex<<16),HEX);
   if (fusenum >= 1) spi_transaction(0xAC, 0xA0, 0x00, lo);
+  delay(100);
   if (fusenum >= 2) spi_transaction(0xAC, 0xA8, 0x00, hi);
+  delay(100);
   if (fusenum >= 3) spi_transaction(0xAC, 0xA4, 0x00, ex);    
   return;
 }

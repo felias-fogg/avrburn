@@ -43,26 +43,25 @@
  *    - use B as exit button (menus, left-or-right, choose file)
  * V0.8 (2.3.2019)
  *    - SPI bit banging checked again with scope. Now Speed from 10 kHz to 600 kHz
- * V0.9
+ * V0.9 (3.3.2019)
  *    - SPI speed settings in spi stransaction corrected
  *    - Verification after setting default values for fuses fixed: needs a restart programming mode
  *    - disabling text wrap after each clear!
  *    - DEBUG deactivated!
+ * V0.9.1 (5.3.2019)
+ *    - switched sound globally off because it leads to annyoingly destorted sound in long menus!
+ *    - fuse editing works now
+ *    - fuse extractor program works (some fuses still need short explanations)
+ *    - new setting: safe fuse editing
+ *    - this setting is respected in fuse_edit_menu
  *    
  */
 
 /* Tested with: ATtiny12, ATtiny13, ATtiny84, ATtiny85, ATtiny167, ATtiny2313, ATmega8, ATmega328, ATmega328P, ATMega1284P, ATmega2560 */
 
-#define DEBUG
+// #define DEBUG
 
-#define VERSION "0.9d"
-
-#include <Gamebuino-Meta.h>
-#include <stdio.h>
-#include <string.h>
-#include "mcus.h"
-#include "menus.h"
-#include "fuses.h"
+#define VERSION "0.9.1"
 
 // number of els
 #define NUMELS(x) (sizeof(x)/sizeof(x[0]))
@@ -78,6 +77,15 @@
 
 // maximum number of data bytes in a line of a HEX file
 #define MAX_LINE_BYTES 16
+
+#define SOUNDOFF
+
+// includes
+#include <Gamebuino-Meta.h>
+#include <stdio.h>
+#include <string.h>
+#include "mcus.h"
+#include "menus.h"
 
 // Pins
 #define ARDU_PIN_RST 2
@@ -153,6 +161,7 @@
 #define SAVE_AUTOVERIFY 0
 #define SAVE_AUTOERASE 1
 #define SAVE_SPEED_INDEX 2
+#define SAVE_SAFEEDIT 3
 
 // timer
 #define BUSY_MS 200U // longest time we consider us busy 
@@ -165,9 +174,8 @@ uint8_t state;
 uint8_t error;
 const char * kindExt[] = { ".LCK", ".FUS", ".HEX", ".EEP" };
 const char * kindStr[] = { "Lock", "Fuses", "Flash", "EEPROM" };
-int16_t settings[] = { 0, -1, -1, 0};
-boolean autoverify = true;
-boolean autoerase = true;
+int16_t settings[] = { 0, -1, -1, -1, 0};
+boolean autoverify, autoerase, safeedit;
 int16_t speedopt[] = { -2, -2, -2, -2,  -2, -2, -2, 0};
 uint16_t spidelayvals[] = { SPI_SPEED0, SPI_SPEED1, SPI_SPEED2, SPI_SPEED3, SPI_SPEED4, SPI_SPEED5, SPI_SPEED6 };
 uint8_t speed_index;
@@ -186,6 +194,7 @@ const SaveDefault savefileDefaults[] = {
   { SAVE_AUTOVERIFY, SAVETYPE_INT, 1, 0 },
   { SAVE_AUTOERASE, SAVETYPE_INT, 1, 0 },
   { SAVE_SPEED_INDEX, SAVETYPE_INT, 3, 0 },
+  { SAVE_SAFEEDIT, SAVETYPE_INT, 1, 0 },
 };
 
 #ifdef DEBUG
@@ -204,11 +213,16 @@ const SaveDefault savefileDefaults[] = {
 
 void setup() {
   gb.begin();
+#ifdef SOUNDOFF
+  gb.sound.mute();
+#endif
   gb.save.config(savefileDefaults);
   autoverify = gb.save.get(SAVE_AUTOVERIFY);
   if (autoverify) settings[ST_AUTOVERIFY] = 1;
   autoerase = gb.save.get(SAVE_AUTOERASE);
   if (autoerase) settings[ST_AUTOERASE] = 1;
+  safeedit = gb.save.get(SAVE_SAFEEDIT);
+  if (safeedit) settings[ST_SAFEEDIT] = 1;
   speed_index = gb.save.get(SAVE_SPEED_INDEX);
   speedopt[speed_index] = 2;
   progspidelay = spidelayvals[speed_index];
@@ -307,6 +321,11 @@ void settings_menu()
     autoerase = (settings[ST_AUTOERASE] == 1);
     gb.save.set(SAVE_AUTOERASE, autoerase);
   }
+  if (safeedit != (settings[ST_SAFEEDIT] == 1)) {
+    safeedit = (settings[ST_SAFEEDIT] == 1);
+    gb.save.set(SAVE_SAFEEDIT, safeedit);
+  }
+  
 }
 
 void speed_menu()
@@ -541,6 +560,8 @@ void display_info()
     gb.display.println((autoverify ? "on" : "off"));
     gb.display.print("Auto erase =");
     gb.display.println((autoerase ? "on" : "off"));
+    gb.display.print("Safe edit  =");
+    gb.display.println((safeedit ? "on" : "off"));
     display_OK();
   }
   if (state != RESET_STATE) state = MENU_STATE;  
@@ -1282,29 +1303,30 @@ void write_hex_word(File & file, uint16_t word)
   write_hex_byte(file, word  & 0xFF);
 }
 
-
-void set_default_fuses()
-{
-  boolean verified = true;
-
+void set_default_fuses() {
   set_prog_mode(true);
   uint16_t mcuix = mcu_ix(mcusig = read_sig());
-  display_header(YELLOW, "Default Fuses");
+  set_prog_mode(false);
+  if (error) return;
+  set_fuses("Default fuses", mcuList[mcuix].fuses,mcuList[mcuix].lowFuse,mcuList[mcuix].highFuse,mcuList[mcuix].extendedFuse);
+}
+
+void set_fuses(const char fusetitle[], uint8_t fusenum, uint8_t low, uint8_t high, uint8_t ext)
+{
+  boolean verified = true;
+  display_header(YELLOW, fusetitle);
   while (!gb.update());
-  if (error) {
-    set_prog_mode(false);
-    return;
-  }
-  program_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
+  set_prog_mode(true);
+  program_fuses(fusenum, low, high, ext);
   set_prog_mode(false);
   set_prog_mode(true);
   if (!error) { 
     if (autoverify) {
-      verified = verify_fuses(mcuList[mcuix].fuses, mcuList[mcuix].lowFuse, mcuList[mcuix].highFuse, mcuList[mcuix].extendedFuse);
+      verified = verify_fuses(fusenum, low, high, ext);
     }
     while (true) {
       if (gb.update()) {
-	display_header(YELLOW, "Default Fuses");
+	display_header(YELLOW, fusetitle);
 	gb.display.println("Programmed!");
 	if (autoverify) {
 	  if (verified) {
@@ -1445,17 +1467,20 @@ int16_t count_entries(File & dir, uint8_t kind)
 
 void fuse_edit()
 {
-  error = NYI_ERROR;
-  return;
-  
+  const char prefix[] = "Do you really want\nto write the fuses:\n";
+  char question[80];
   uint16_t fix = 0;
-  uint32_t newfuses, fuses;
+  int8_t reply;
+  boolean verified;
+  uint32_t fuses;
+  uint8_t fusenum;
   set_prog_mode(true);
   uint16_t mcusig = read_sig();
   if (!error) {
     fuses = read_fuses();
   }
   set_prog_mode(false);
+  fusenum = mcuList[mcu_ix(mcusig)].fuses;
   if (error) return;
   for (uint16_t i=0; i < NUMELS(fuseMenuList); i++) 
     if (fuseMenuList[i].sig == mcusig) fix = i;
@@ -1463,9 +1488,45 @@ void fuse_edit()
     error = NO_FUSE_INFO_ERROR;
     return;
   }
-  DEBPR("fuse_edit before: ");
-  DEBLNF(fuses,HEX);
-  newfuses = fuses_edit_menu("Edit fuses", fuseMenuList[fix].fuseList, NUMELS(fuseMenuList[fix].fuseList), fuses);
-  DEBPR("fuse_edit after: ");
-  DEBLNF(newfuses,HEX);
+  do {
+    DEBPR("fuse_edit before: ");
+    DEBLNF(fuses,HEX);
+    fuses = fuses_edit_menu("Edit fuses", fuseMenuList[fix].fuseList,  fuses);
+    DEBPR("fuse_edit after: ");
+    DEBLNF(fuses,HEX);
+    strcpy(question, prefix);
+    if (fusenum > 0) {
+      strcat(question, "L:0x");
+      strcat(question, hex_byte_str(fuses & 0xFF));
+    }
+    if (fusenum > 1) {
+      strcat(question, ",H:0x");
+      strcat(question, hex_byte_str((fuses >> 8)& 0xFF));
+    }
+    if (fusenum > 2) {
+      strcat(question, ",X:0x");
+      strcat(question, hex_byte_str((fuses >> 16)& 0xFF));
+    }
+    reply = left_mid_or_right("Writing fuse values", question, "Write", "Abort", "Back", 0);
+    if (reply == 0 || error) return;
+  } while (reply != 1);
+  set_fuses("Write fuse values",fusenum, (fuses & 0xFF), ((fuses>>8) & 0xFF), ((fuses>>16) & 0xFF));
+}
+
+char * hex_byte_str(uint8_t num)
+{
+  static char str[3];
+  str[0] = conv_to_hexchar(num >> 4);
+  str[1] = conv_to_hexchar(num&0xF);
+  str[2] = '\0';
+  return str;
+}
+
+char conv_to_hexchar(uint8_t dig)
+{
+  if ((dig&0xf) >= 0 && (dig&0xf) <= 9) {
+    return (char)((dig&0xf)+'0');
+  } else {
+    return (char)((dig&0xf)+(uint8_t)'A'-10);
+  }
 }

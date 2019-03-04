@@ -5,29 +5,33 @@
 
 const uint8_t menuYOffset = 9;
 
-void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int8_t optval) {
+void myMenuDrawBox(const char* text, uint16_t i, int32_t y, int8_t optval, boolean danger) {
+  char itemline[21];
   y += i*8 + menuYOffset;
   if (y < 0 || y > 64) {
     return;
   }
+  strncpy(itemline, text, 18);
+  itemline[18] = '\0';
   gb.display.setColor(DARKGRAY);
   gb.display.fillRect(1, y+1, gb.display.width()-2, 7);
-  gb.display.setColor(WHITE);
+  if (danger) gb.display.setColor(GRAY);
+  else gb.display.setColor(WHITE);
   gb.display.setCursor(2, y+2);
-  gb.display.print(text);
+  gb.display.print(itemline);
   if (optval) {
     switch (optval) {
     case 1:
       gb.display.fillRect(gb.display.width() - 1 - gb.display.fontWidth, y + 1, gb.display.fontWidth, gb.display.fontHeight );
       break;
     case 2:
-      gb.display.fillCircle(gb.display.width() - 3 - gb.display.fontWidth/2, y + 1 +  gb.display.fontHeight/2 -1 , gb.display.fontWidth/2);
+      gb.display.fillCircle(gb.display.width() - 2 - gb.display.fontWidth/2, y + 1 +  gb.display.fontHeight/2 -1 , gb.display.fontWidth/2);
       break;
     case -1:
       gb.display.drawRect(gb.display.width() - 1 - gb.display.fontWidth, y + 1, gb.display.fontWidth, gb.display.fontHeight );
       break;
     case -2:
-      gb.display.drawCircle(gb.display.width() - 3 - gb.display.fontWidth/2, y + 1 +  gb.display.fontHeight/2 -1 , gb.display.fontWidth/2);
+      gb.display.drawCircle(gb.display.width() - 2 - gb.display.fontWidth/2, y + 1 +  gb.display.fontHeight/2 -1 , gb.display.fontWidth/2);
       break;
     }
   }
@@ -71,7 +75,7 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
     
     for (uint8_t i = 0; i < length; i++) {
       int8_t optval = (opts ? opts[i] : 0);
-      myMenuDrawBox(items[i], i, cameraY_actual, optval);
+      myMenuDrawBox(items[i], i, cameraY_actual, optval, false);
     }
     
     myMenuDrawCursor(cursor, cameraY_actual);
@@ -140,19 +144,33 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
 }
 
 
-uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint16_t length, uint32_t initial)
+uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t initial)
 {
   
   int16_t cursor = 0;
   int32_t cameraY = 0;
   int32_t cameraY_actual = 0;
   uint8_t buf[4];
+  uint16_t length = 0;
 
+  for (int16_t i=0; i < MAX_FUSE_PROPS; i++) {
+    DEBPR("list entry ");
+    DEBPR(i);
+    DEBPR(" addr=");
+    DEBPR(list[i].addr);
+    DEBPR(" mask=");
+    DEBLN(list[i].mask);
+    length++;
+    if (list[i].mask == 0) break;
+  }
+
+  DEBPR("fuses_edit_menu: length=");
+  DEBLN(length);
+  
   for (uint8_t i=0; i<4; i++) {
     buf[i] = initial & 0xFF;
     initial >>= 8;
   }
-  
   while(1) {
     while(!gb.update());
     gb.display.clear();
@@ -163,8 +181,8 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint16_t le
       cameraY_actual = cameraY;
     }
     
-    for (uint8_t i = 0; i < length; i++) 
-      myMenuDrawBox(fuseProps[list[i].mes], i, cameraY_actual, optval(list, length, i, buf));
+    for (uint16_t i = 0; i < length; i++) 
+      myMenuDrawBox(fuseProps[list[i].mes], i, cameraY_actual, optval(list, length, i, buf),list[i].danger && safeedit);
     
     myMenuDrawCursor(cursor, cameraY_actual);
     
@@ -178,9 +196,11 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint16_t le
     gb.display.drawFastHLine(0, 7, gb.display.width());
 
     if (gb.buttons.released(BUTTON_A)) {
-      gb.sound.playOK();
-      if (list[cursor].mask == 0) return new_value(buf);
-      change_value(list, length, cursor, buf);
+      if (list[cursor].mask == 0) {
+	gb.sound.playOK();
+      	return new_value(buf);
+      }
+      if (change_value(list, length, cursor, buf) && !error) gb.sound.playOK();
     }
 
     if (gb.buttons.released(BUTTON_B)) {
@@ -227,21 +247,27 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint16_t le
 int8_t optval(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
 {
   int8_t marker = 1;
+  if (list[ix].mask == 0) return 0;
   for (uint16_t i=0; i < length; i++)
     if (i != ix && list[i].mask == list[ix].mask && list[i].addr == list[ix].addr) marker = 2;
   if ((list[ix].mask & buf[list[ix].addr]) != list[ix].value) marker = -marker;
   return marker;
 }
 
-void change_value(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+boolean change_value(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
 {
+  if (list[ix].danger && safeedit) {
+    return false;
+  }
   int8_t marker = optval(list, length, ix, buf);
   switch (marker) {
   case 2: break;
   case -2: buf[list[ix].addr] = (buf[list[ix].addr] & ~list[ix].mask) | list[ix].value; break;
   case 1: buf[list[ix].addr] |= list[ix].mask; break;
   case -1: buf[list[ix].addr] &= ~list[ix].mask; break;
+  default: error = CONFUSION_ERROR; break;
   }
+  return true;
 }
 
 
@@ -251,14 +277,24 @@ uint32_t new_value(uint8_t buf[4])
 }
 
 
-
-boolean left_or_right(const char * title, const char * question, const char * left, const char * right, boolean leftpos)
+// returns 1, 0, -1 based on whether left, mid, or right alternative has been chosen
+// id mid == NULL, then only twoalternatives are shown.
+int8_t left_mid_or_right(const char * title, const char * question, const char * left, const char * mid, const char * right, int8_t pos)
 {
-  int leftx, leftwidth, rightx, rightwidth;
-  leftwidth = (strlen(left)*gb.display.getFontWidth());
-  leftx = (gb.display.width()/2-leftwidth)/2;
-  rightwidth = (strlen(right)*gb.display.getFontWidth());
-  rightx = gb.display.width()/2+(gb.display.width()/2-rightwidth)/2;
+  int leftx, leftwidth, midx, midwidth, rightx, rightwidth;
+  if (mid == NULL) {
+    leftwidth = (strlen(left)*gb.display.getFontWidth());
+    leftx = (gb.display.width()/2-leftwidth)/2;
+    rightwidth = (strlen(right)*gb.display.getFontWidth());
+    rightx = gb.display.width()/2+(gb.display.width()/2-rightwidth)/2;
+  } else {
+    leftwidth = (strlen(left)*gb.display.getFontWidth());
+    leftx = (gb.display.width()/3-leftwidth)/2;
+    midwidth = (strlen(left)*gb.display.getFontWidth());
+    midx = gb.display.width()/3+(gb.display.width()/3-midwidth)/2;
+    rightwidth = (strlen(right)*gb.display.getFontWidth());
+    rightx = 2*gb.display.width()/3+(gb.display.width()/3-rightwidth)/2;
+  }
 
   while (1) {
     while(!gb.update());
@@ -280,23 +316,43 @@ boolean left_or_right(const char * title, const char * question, const char * le
     gb.display.setColor(DARKGRAY);
     gb.display.fillRect(leftx, 50, leftwidth, gb.display.getFontHeight());
     gb.display.fillRect(rightx, 50, rightwidth, gb.display.getFontHeight());
+    if (mid != NULL)
+      gb.display.fillRect(midx, 50, midwidth, gb.display.getFontHeight());
 
     gb.display.setColor(RED);
     gb.display.setCursor(leftx,50);
     gb.display.print(left);
     gb.display.setCursor(rightx,50);
     gb.display.print(right);
+    if (mid != NULL) {
+      gb.display.setCursor(midx,50);
+      gb.display.print(mid);
+    }
 
     gb.display.setColor(BROWN);
-    if (leftpos)  gb.display.drawRect(leftx-1, 49, leftwidth+2, gb.display.getFontHeight()+2);
-    else gb.display.drawRect(rightx-1, 49, rightwidth+2, gb.display.getFontHeight()+2);
-    if (check_OK()) return leftpos;
-
-    if (gb.buttons.released(BUTTON_LEFT)) leftpos = true;
-    if (gb.buttons.released(BUTTON_RIGHT)) leftpos = false;
+    switch (pos) {
+    case 1:  gb.display.drawRect(leftx-1, 49, leftwidth+2, gb.display.getFontHeight()+2); break;
+    case 0:  gb.display.drawRect(midx-1, 49, midwidth+2, gb.display.getFontHeight()+2); break;
+    case -1: gb.display.drawRect(rightx-1, 49, rightwidth+2, gb.display.getFontHeight()+2); break;
+    }
+    
+    if (check_OK()) return pos;
+    
+    if (gb.buttons.released(BUTTON_LEFT) && pos < 1) {
+      pos++;
+      if (pos == 0 && mid == NULL) pos++;
+    }
+    if (gb.buttons.released(BUTTON_RIGHT) && pos > -1) {
+      pos--;
+      if (pos == 0 && mid == NULL) pos--;
+    }
   }
 }
 
+boolean left_or_right(const char * title, const char * question, const char * left,  const char * right, boolean leftpos)
+{
+  return left_mid_or_right(title, question, left, NULL, right, (leftpos ? 1 : -1));
+}
 
 // Keyboard copied from Gambuino Meta
 

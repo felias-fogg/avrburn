@@ -14,7 +14,8 @@
 #define ST_SPISPEED 0
 #define ST_AUTOVERIFY 1
 #define ST_AUTOERASE 2
-#define ST_EXIT 3
+#define ST_SAFEEDIT 3
+#define ST_EXIT 4
 
 // read/write/verify menu
 #define RWV_PROG 0
@@ -35,7 +36,7 @@ const char * mainmenu[]  = {
   "Detect MCU",  "Flash", "EEPROM",  "Fuses",  "Lock bits", "Chip erase", "Settings", "Info", "Restart" };
 
 const char * settingsmenu[]  = {
-  "SPI Speed", "Auto Verify", "Auto Erase", "Exit" };
+  "SPI Speed", "Auto Verify", "Auto Erase", "Safe Fuse Editting", "Exit" };
 
 
 const char * speedmenu[]  = {
