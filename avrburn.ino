@@ -44,8 +44,8 @@
  * V0.8 (2.3.2019)
  *    - SPI bit banging checked again with scope. Now Speed from 10 kHz to 600 kHz
  * V0.9 (3.3.2019)
- *    - SPI speed settings in spi stransaction corrected
- *    - Verification after setting default values for fuses fixed: needs a restart programming mode
+ *    - SPI speed settings in spi_transaction corrected
+ *    - Verification after setting default values for fuses fixed: needs a restart of the programming mode
  *    - disabling text wrap after each clear!
  *    - DEBUG deactivated!
  * V0.9.1 (5.3.2019)
@@ -54,14 +54,18 @@
  *    - fuse extractor program works (some fuses still need short explanations)
  *    - new setting: safe fuse editing
  *    - this setting is respected in fuse_edit_menu
+ * V0.9.2 (5.3.2019)
+ *    - fixed yes/no problem
+ * V0.9.3
+ *   - now all fuse strings for the tested MCUs are defined
  *    
  */
 
-/* Tested with: ATtiny12, ATtiny13, ATtiny84, ATtiny85, ATtiny167, ATtiny2313, ATmega8, ATmega328, ATmega328P, ATMega1284P, ATmega2560 */
+/* Tested with: ATtiny12, ATtiny13, ATtiny84, ATtiny85, ATtiny167, ATtiny2313, ATmega8, ATmega48,  ATmega328P, ATMega1284P, ATmega2560, ATmega8535 */
 
 // #define DEBUG
 
-#define VERSION "0.9.1"
+#define VERSION "0.9.3"
 
 // number of els
 #define NUMELS(x) (sizeof(x)/sizeof(x[0]))

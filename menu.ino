@@ -351,7 +351,7 @@ int8_t left_mid_or_right(const char * title, const char * question, const char *
 
 boolean left_or_right(const char * title, const char * question, const char * left,  const char * right, boolean leftpos)
 {
-  return left_mid_or_right(title, question, left, NULL, right, (leftpos ? 1 : -1));
+  return (left_mid_or_right(title, question, left, NULL, right, (leftpos ? 1 : -1)) == 1);
 }
 
 // Keyboard copied from Gambuino Meta
