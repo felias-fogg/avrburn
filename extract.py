@@ -295,9 +295,121 @@ assoc = {
     'EXTMEDFXTALRES_258CK_4MS' : (279, "Med F XTAL 256/4ms", 0),
     'EXTMEDFXTALRES_258CK_64MS' : (280, "Med F XTAL 256/64ms", 0),
     'FSOSC_258CK_4MS1_CRES_FASTPWR' : (281, "FS XTAL 256/4ms", 0),
+    'PLLCLK_PLLIN_EXTCLK_6KCK_14CK_0MS' : (282, "PLLe/4 6K/0ms up", 0),
+    'PLLCLK_PLLIN_EXTCLK_6KCK_14CK_4MS' : (283, "PLLe/4 6K/4ms up", 0),
+    'PLLCLK_PLLIN_EXTCLK_6KCK_14CK_64MS' : (284, "PLLe/4 6K/64ms up", 0),
+    'PLLCLK_PLLIN_EXTXOSC_1KCK_14CK_0MS' : (285, "PLLeXTAL/4 1K/0ms", 0),
+    'PLLCLK_PLLIN_EXTXOSC_1KCK_14CK_4MS' : (286, "PLLeXTAL/4 1K/4ms", 0),
+    'PLLCLK_PLLIN_EXTXOSC_1KCK_14CK_64MS' : (287, "PLLeXTAL/4 1K/64ms", 0),
+    'PLLCLK_PLLIN_EXTXOSC_16KCK_14CK_0MS' : (288, "PLLeXTAL/4 16K/0ms", 0),
+    'PLLCLK_PLLIN_EXTXOSC_16KCK_14CK_4MS' : (289, "PLLeXTAL/4 16K/4ms", 0),
+    'PLLCLK_PLLIN_EXTXOSC_16KCK_14CK_64MS' : (290, "PLLeXTAL/4 16K/64ms", 0),
+    'EXTXOSC_PLLIN_EXTXOSC_1KCK_14CK_0MS' : (291, "XTAL PLL 1K/0ms up", 0),
+    'EXTXOSC_PLLIN_EXTXOSC_1KCK_14CK_4MS' : (292, "XTAL PLL 1K/4ms up", 0),
+    'EXTXOSC_PLLIN_EXTXOSC_16KCK_14CK_4MS' : (293, "XTAL PLL 16K/4ms up", 0),
+    'EXTXOSC_PLLIN_EXTXOSC_16KCK_14CK_64MS' : (294, "XTAL PLL 16K/64ms up", 0),
+    'EXTLOFXTAL_32KCK_0MS_INTCAP' : (295, "LowFXTALiCap32K/0ms", 0),
+    'EXTLOFXTAL_32KCK_4MS1_INTCAP' : (296, "LowFXTALiCap32K/4ms", 0),
+    'EXTLOFXTAL_32KCK_65MS_INTCAP' : (297, "LowFXTALiCap32K/64ms", 0),
+    'EXTLOFXTAL_1KCK_0MS_INTCAP' : (298, "LowFXTALiCap1K/0ms", 0),
+    'EXTLOFXTAL_1KCK_4MS1_INTCAP' : (299, "LowFXTALiCap1K/4ms", 0),
+    'EXTLOFXTAL_1KCK_65MS_INTCAP' : (300, "LowFXTALiCap1K/64ms", 0),
+    'TOSC_258CK_4MS1' : (301, "TX Osc 258/4ms up", 0),
+    'TOSC_258CK_65MS' : (302, "TX Osc 258/64ms up", 0),
+    'TOSC_1KCK_0MS' : (303, "TX Osc 1K/0ms up", 0),
+    'TOSC_1KCK_4MS1' : (304, "TX Osc 1K/4ms up", 0),
+    'TOSC_1KCK_65MS' : (305, "TX Osc 1K/64ms up", 0),
+    'TOSC_16KCK_0MS' : (306, "TX Osc 16K/0ms up", 0),
+    'TOSC_16KCK_4MS1' : (307, "TX Osc 16K/4ms up", 0),
+    'TOSC_16KCK_65MS' : (308, "TX Osc 16K/64ms up", 0),
+    'EXTXOSC_8MHZ_16MHZ_258CK_4MS1' : (309, "XTAL8-16MHz258/4ms", 0),
+    'EXTXOSC_8MHZ_16MHZ_258CK_65MS' : (310, "XTAL8-16MHz258/64ms", 0),
+    'EXTXOSC_8MHZ_16MHZ_1KCK_0MS' : (311, "XTAL8-16MHz1K/0ms", 0),
+    'EXTXOSC_8MHZ_16MHZ_1KCK_4MS1' : (312, "XTAL8-16MHz1K/4ms", 0),
+    'EXTXOSC_8MHZ_16MHZ_1KCK_65MS' : (313, "XTAL8-16MHz1K/64ms", 0),
+    'EXTCRES_8MHZ_XX_258CK_14CK_4MS1' : (314, "Res8-Hz 256/4ms", 0),
+    'EXTCRES_8MHZ_XX_258CK_14CK_65MS' : (315, "Res8-Hz 256/64ms", 0),
+    'EXTCRES_8MHZ_XX_1KCK_14CK_0MS' :  (316, "Res8-Hz 1K/0ms", 0),
+    'EXTCRES_8MHZ_XX_1KCK_14CK_4MS1' : (317, "Res8-Hz 1K/4ms", 0),
+    'EXTCRES_8MHZ_XX_1KCK_14CK_65MS' : (318, "Res8-Hz 1K/64ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_258CK_14CK_4MS1' : (319, "XTAL-3M/PLLi258/4ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_258CK_14CK_65MS' : (320, "XTAL-3M/PLLi258/64ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_1KCK_14CK_0MS' : (321, "XTAL-3M/PLLi1K/0ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_1KCK_14CK_4MS1' : (322, "XTAL-3M/PLLi1K/4ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_1KCK_14CK_65MS' : (323, "XTAL-3M/PLLi1K/64ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_16KCK_14CK_0MS' : (324, "XTAL-3M/PLLi16K/0ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_16KCK_14CK_4MS1' : (325, "XTAL-3M/PLLi16K/4ms", 0),
+    'XOSC_PLLIN_RC_8MHZ_16KCK_14CK_65MS' : (326, "XTAL-3M/PLLi16K/64ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_258CK_14CK_4MS1' : (327, "XTAL3-8M/Pi258/4ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_258CK_14CK_65MS' : (328, "XTAL3-8M/Pi258/64ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_1KCK_14CK_0MS' : (329, "XTAL3-8M/Pi1K/0ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_1KCK_14CK_4MS1' : (330, "XTAL3-8M/Pi1K/4ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_1KCK_14CK_65MS' : (331, "XTAL3-8M/Pi1K/64ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_16KCK_14CK_0MS' : (332, "XTAL3-8M/Pi16K/0ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_16KCK_14CK_4MS1' : (333, "XTAL3-8M/Pi16K/4ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_RC_8MHZ_16KCK_14CK_65MS' : (334, "XTAL3-8M/Pi16K/64ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_258CK_14CK_4MS1' : (335, "XTAL8-M/Pi256/4ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_258CK_14CK_65MS' : (336, "XTAL8-M/Pi256/64ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_1KCK_14CK_0MS' : (337, "XTAL8-M/Pi1K/0ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_1KCK_14CK_4MS1' : (338, "XTAL8-M/Pi1K/4ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_1KCK_14CK_65MS' : (339, "XTAL8-M/Pi1K/64ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_16KCK_14CK_0MS' : (340, "XTAL8-M/Pi16K/0ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_16KCK_14CK_4MS1' : (341, "XTAL8-M/Pi16K/4ms", 0),
+    'XOSC_8MHZ_16MHZ_PLLIN_RC_8MHZ_16KCK_14CK_65MS' : (342, "XTAL8-M/Pi16K/64ms", 0),
+    'PLLCLK_DIV4_PLLIN_XOSC_1KCK_14CK_0MS' : (343, "PLLeXTAL/4 1K/0ms up", 0),
+    'PLLCLK_DIV4_PLLIN_XOSC_1KCK_14CK_4MS' : (344, "PLLeXTAL/4 1K/4ms up", 0),
+    'PLLCLK_DIV4_PLLIN_XOSC_1KCK_14CK_64MS' : (345, "PLLeXTAL/4 1K/64ms up", 0),
+    'PLLCLK_DIV4_PLLIN_XOSC_16KCK_14CK_0MS' : (346, "PLLeXTAL/4 16K/0ms up", 0),
+    'EXTLOFXTAL_1KCK_16CK_16MS' : (347, "Low F XTAL 1K/16ms", 0),
+    'EXTCRES_0MHZ4_0MHZ9_258CK_16CK_16MS' : (348, "Res.4-.9MHz258/16ms", 0),
+    'EXTCRES_0MHZ4_0MHZ9_1KCK_16CK_16MS' :  (349, "Res.4-.9MHz 1K/16ms", 0),
+    'EXTCRES_0MHZ9_3MHZ_258CK_16CK_16MS' : (350, "Res.9-3MHz 258/16ms", 0),
+    'EXTCRES_0MHZ9_3MHZ_1KCK_16CK_16MS' :  (351, "Res.9-3MHz  1K/16ms", 0),
+    'EXTCRES_3MHZ_8MHZ_258CK_16CK_16MS' : (352, "Res3-8MHz 256/16ms", 0),
+    'EXTCRES_3MHZ_8MHZ_1KCK_16CK_16MS' : (353, "Res3-8MHz  1K/16ms", 0),
+    'EXTCRES_8MHZ_XX_258CK_16CK_16MS' : (354, "Res8-MHz 256/16ms", 0),
+    'EXTCRES_8MHZ_XX_1KCK_16CK_16MS' : (355, "Res8-MHz  1K/16ms", 0),
+    'EXTXOSC_0MHZ4_0MHZ9_16KCK_16CK_16MS' : (356, "XTAL.4-.9MHz16K/16ms", 0),
+    'EXTXOSC_0MHZ9_3MHZ_16KCK_16CK_16MS' : (357, "XTAL.9-3MHz16K/16ms", 0),
+    'EXTXOSC_3MHZ_8MHZ_16KCK_16CK_16MS' :  (358, "XTAL3-8MHz16K/16ms", 0),
+    'EXTXOSC_8MHZ_XX_16KCK_16CK_16MS' :  (359, "XTAL8-MHz16K/16ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_16KCK_14CK_65MS' : (360, "XTAL3-8M/Pe16K/64ms", 0),
+    'EXTLOFXTAL_32KCK_14CK_16MS' : (361, "Low F XTAL 32K/16ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_258CK_14CK_4MS1' : (362, "XTAL3-8M/Pe258/4ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_258CK_14CK_65MS' : (363, "XTAL3-8M/Pe258/64ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_1KCK_14CK_0MS' : (364, "XTAL3-8M/Pe1K/0ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_1KCK_14CK_4MS1' : (365, "XTAL3-8M/Pe1K/4ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_1KCK_14CK_65MS' : (366, "XTAL3-8M/Pe1K/64ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_16KCK_14CK_0MS' : (367, "XTAL3-8M/Pe16K/0ms", 0),
+    'XOSC_3MHZ_8MHZ_PLLIN_XOSC_16KCK_14CK_4MS1' : (368, "XTAL3-8M/Pe16K/4ms", 0),
+    'LBPROG_VER_DISABLED' : (369, "No prog/no verif", 1),
+    'LBPROG_DISABLED' : (370, "No porgramming", 1),
+    'LBNO_LOCK' : (371, "No prog. lock", 1),
+    'BLB0LPM_SPM_DISABLE' : (372, "No LPM&SPM to APP area", 1),
+    'BLB0LPM_DISABLE' : (373, "No LPM to APP area", 1),
+    'BLB0SPM_DISABLE' : (374, "No SPM to APP area", 1),
+    'BLB0NO_LOCK' : (375, "No lock on APP area", 1),
+    'BLB1LPM_SPM_DISABLE' : (376, "No LPM&SPM to BOOT area", 1),
+    'BLB1LPM_DISABLE' : (377, "No LPM to BOOT area", 1),
+    'BLB1SPM_DISABLE' : (378, "No SPM to BOOT area", 1),
+    'BLB1NO_LOCK' : (379, "No lock on BOOT area", 1),
+    'WDOSC_128KHZ_1KCK_14CK_65MS' : (380, "Int 128kHz 1K/64ms", 1),
+    'WDOSC_128KHZ_1KCK_14CK_4MS1' : (381, "Int 128kHz 1K/4ms", 1),
+    'WDOSC_128KHZ_1KCK_14CK_0MS' : (382, "Int 128kHz 1K/0ms", 1),
     }
 
 mapsto = {
+    'EXTLOFXTAL_32CK_64MS' : 'EXTLOFXTAL_32KCK_65MS',
+    'EXTLOFXTAL_1CK_64MS' : 'EXTLOFXTALRES_1KCK_64MS',
+    'EXTLOFXTAL_1CK_4MS' : 'EXTLOFXTALRES_1KCK_4MS',
+    'TRXOSC_258CK_4MS1' : 'TOSC_258CK_4MS1',
+    'TRXOSC_258CK_65MS' : 'TOSC_258CK_65MS',
+    'TRXOSC_1KCK_0MS'   : 'TOSC_1KCK_0MS',
+    'TRXOSC_1KCK_4MS1'  : 'TOSC_1KCK_4MS1',
+    'TRXOSC_1KCK_65MS'  :'TOSC_1KCK_65MS',
+    'TRXOSC_16KCK_0MS'  :  'TOSC_16KCK_0MS',
+    'TRXOSC_16KCK_4MS1' :   'TOSC_16KCK_4MS1',
+    'TRXOSC_16KCK_65MS' :  'TOSC_16KCK_65MS',
     'EXTXOSC_3MHZ_8MHZ_16KCK_14CK_0MS' :  'EXTXOSC_3MHZ_8MHZ_16KCK_0MS',
     'EXTXOSC_3MHZ_8MHZ_16KCK_14CK_4MS1' : 'EXTXOSC_3MHZ_8MHZ_16KCK_4MS1',
     'EXTXOSC_3MHZ_8MHZ_16KCK_14CK_65MS' : 'EXTXOSC_3MHZ_8MHZ_16KCK_65MS',
@@ -310,6 +422,7 @@ mapsto = {
     'EXTLOFXTAL_1KCK_14CK_65MS' : 'EXTLOFXTAL_1KCK_65MS',
     'EXTLOFXTAL_1KCK_14CK_0MS' :  'EXTLOFXTAL_1KCK_0MS',
     'EXTLOFXTAL_1KCK_14CK_4MS1' : 'EXTLOFXTAL_1KCK_4MS1',
+    'EXTLOFXTAL_1KCK_14CK_4MS' :  'EXTLOFXTAL_1KCK_4MS1',
     'EXTLOFXTAL_32KCK_14CK_64MS' : 'EXTLOFXTAL_32KCK_65MS',
     'EXTLOFXTAL_1KCK_4MS' : 'EXTLOFXTAL_1KCK_4MS1',
     'EXTLOFXTAL_1KCK_64MS' :  'EXTLOFXTAL_1KCK_65MS',
@@ -345,7 +458,8 @@ mapsto = {
     'EXTXOSC_8MHZ_XX_1KCK_14CK_65MS' : 'EXTXOSC_8MHZ_XX_1KCK_65MS',
     'EXTXOSC_8MHZ_XX_16KCK_14CK_0MS' : 'EXTXOSC_8MHZ_XX_16KCK_0MS',
     'EXTXOSC_8MHZ_XX_16KCK_14CK_4MS1' : 'EXTXOSC_8MHZ_XX_16KCK_4MS1',
-    'EXTXOSC_8MHZ_XX_16KCK_14CK_65MS' : 'EXTXOSC_8MHZ_XX_16KCK_65MS',    'EXTCLK_14CK_64MS' : 'EXTCLK_6CK_14CK_65MS',
+    'EXTXOSC_8MHZ_XX_16KCK_14CK_65MS' : 'EXTXOSC_8MHZ_XX_16KCK_65MS',
+    'EXTCLK_14CK_64MS' : 'EXTCLK_6CK_14CK_65MS',
     'EXTCLK_14CK_4MS' :  'EXTCLK_6CK_14CK_4MS1',
     'EXTCLK_6CK_14CK_4MS' :  'EXTCLK_6CK_14CK_4MS1',
     'EXTCLK_6CK_14CK_64MS' : 'EXTCLK_6CK_14CK_65MS',
@@ -366,9 +480,6 @@ mapsto = {
     'RC_8MHZ_PLLIN_RC_8MHZ_6CK_14CK_65MS' : 'INTRCOSC_8MHZ_6CK_14CK_64MS',
     'RC_8MHZ_PLLIN_RC_8MHZ_6CK_14CK_4MS1' : 'INTRCOSC_8MHZ_6CK_14CK_4MS',
     'RC_8MHZ_PLLIN_RC_8MHZ_6CK_14CK_0MS' : 'INTRCOSC_8MHZ_6CK_14CK_0MS',
-    'WDOSC_128KHZ_1KCK_14CK_65MS' : 'INTRCOSC_1MHZ_6CK_64MS',
-    'WDOSC_128KHZ_1KCK_14CK_4MS1' : 'INTRCOSC_1MHZ_6CK_4MS',
-    'WDOSC_128KHZ_1KCK_14CK_0MS' : 'INTRCOSC_1MHZ_6CK_0MS',
     'RC_1MHZ_1KCK_14CK_65MS' :  'INTRCOSC_1MHZ_6CK_64MS',
     'RC_1MHZ_1KCK_14CK_4MS1' : 'INTRCOSC_1MHZ_6CK_4MS',
     'RC_1MHZ_1KCK_14CK_0MS' : 'INTRCOSC_1MHZ_6CK_0MS',
@@ -391,7 +502,6 @@ mapsto = {
     'INTRCOSC_128KHZ_6CK_14CK_65MS' : 'INTRCOSC_128KHZ_6CK_64MS',
     'INTRCOSC_128KHZ_6CK_14CK_4MS1' : 'INTRCOSC_128KHZ_6CK_4MS',
     'INTRCOSC_128KHZ_6CK_14CK_0MS' : 'INTRCOSC_128KHZ_6CK_0MS',
-    'INTRCOSC_1MHZ_6CK_64MS' : 'INTRCOSC_6CK_65MS',
     'INTRCOSC_128KHZ_6CK_4MS1' : 'INTRCOSC_128KHZ_6CK_4MS',
     'INTRCOSC_128KHZ_6CK_65MS' : 'INTRCOSC_128KHZ_6CK_64MS',
     'BOD_ENABLED' : 'BODEN',
@@ -433,7 +543,7 @@ mapsto = {
 
 mcuTypeString = '''
 typedef struct mcuItem { 
-  const char name[MAX_MCU_NAME_LENGTH+1];
+  char name[MAX_MCU_NAME_LENGTH+1];
   uint16_t signature;
   uint8_t fuses;
   uint8_t lowFuse;
@@ -473,7 +583,6 @@ typedef struct fuseMenu {
 ''';
 
 def process_atdf(path):
-    global prop
     with open(path) as f:
         s = f.read()
         if (s.find('<interface name="ISP"') < 0): return None
@@ -508,6 +617,8 @@ def extract_mcuprops(s):
     return (name, sig, fusesz, low, high, extended, epoll, edelay, flashsz, flashps, fmode, fdelay, fpoll, eepsz, eepps, eemode, eedelay, eepoll)
 
 def extract_fuseprops(s):
+    lock = re.search('(?s)register caption="" name="LOCKBIT".*?>(.*?)</register>',s)
+    if (lock): lock = lock.group(1)
     sig = re.search('property name="SIGNATURE1" value="0x(.{2})"',s).group(1) + \
         re.search('property name="SIGNATURE2" value="0x(.{2})"',s).group(1)
     extfuse = re.search('(?s)register caption="" name="EXTENDED".*?>(.*?)</register>',s)
@@ -516,7 +627,7 @@ def extract_fuseprops(s):
     if (highfuse): highfuse = highfuse.group(1) 
     lowfuse = re.search('(?s)register caption="" name="LOW".*?>(.*?)</register>',s)
     if (lowfuse): lowfuse = lowfuse.group(1)
-    return( [sig] + bitfields(extfuse,2,s) + bitfields(highfuse,1,s) + bitfields(lowfuse,0,s))
+    return( [sig] + bitfields(extfuse,2,s) + bitfields(highfuse,1,s) + bitfields(lowfuse,0,s) + bitfields(lock,3,s))
 
 def bitfields(fields, addr, s):
     entries = []
@@ -526,13 +637,15 @@ def bitfields(fields, addr, s):
         if el.find('values="') < 0:
             entries.append((normalize_name(re.search('name="(.*?)"',el).group(1)), addr, re.search('mask="(.*?)"',el).group(1), "0x00"))
         else:
-            entries.extend(valuefields(re.search('values="(.*?)"',el).group(1), re.search('mask="(.*?)"',el).group(1), addr, s))
+            entries.extend(valuefields(normalize_name(re.search('name="(.*?)"',el).group(1)),re.search('values="(.*?)"',el).group(1),
+                                       re.search('mask="(.*?)"',el).group(1), addr, s))
     return entries
 
-def valuefields(valname, mask, addr, s):
+def valuefields(name, valname, mask, addr, s):
     entries = []
     fields = re.search('(?s)<value-group caption="" name="' + valname + '">(.*?)</value-group>',s).group(1)
     for (n,v) in re.findall('<value caption=".*?" name="(.*?)" value="(.*?)"/>',fields):
+        if (addr == 3): n = name + n
         entries.append((normalize_name(n), addr, mask, normalize_val(mask,v)))
     return entries
 
@@ -588,8 +701,13 @@ def output_mcus(mculist, fuselist):
                     print(prop[0], "is unknown!")
                     lastprop += 1
                     assoc.update({prop[0] : (lastprop, prop[0], 0)})
+        toprint = 0
         for const in sorted(assoc.items(),key=(lambda x: x[1])):
+            if toprint != const[1][0]:
+                print("Item", toprint, "missing!")
+                exit()
             print("#define", const[0], const[1][0], file=m)
+            toprint += 1
         print("\nconst char * fuseProps[] = {", file=m)
         for const in sorted(assoc.items(),key=(lambda x: x[1])):
             print('  "' + const[1][1] + '",', file=m)

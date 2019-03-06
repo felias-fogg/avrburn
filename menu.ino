@@ -144,7 +144,7 @@ int16_t menu(const char* title, const char* const * items, int16_t * opts, uint1
 }
 
 
-uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t initial)
+uint32_t fuses_edit_menu(const char title[], uint8_t kind, fuseItems const list[], uint32_t initial)
 {
   
   int16_t cursor = 0;
@@ -152,15 +152,17 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t in
   int32_t cameraY_actual = 0;
   uint8_t buf[4];
   uint16_t length = 0;
+  uint16_t index[MAX_FUSE_PROPS];
 
-  for (int16_t i=0; i < MAX_FUSE_PROPS; i++) {
-    DEBPR("list entry ");
-    DEBPR(i);
-    DEBPR(" addr=");
-    DEBPR(list[i].addr);
-    DEBPR(" mask=");
-    DEBLN(list[i].mask);
-    length++;
+  // select the right entries
+  for (uint16_t i=0; i < MAX_FUSE_PROPS; i++) {
+    if (kind == FUSE_KIND) {
+      if (list[i].addr <= 2) 
+	index[length++] = i;
+    } else { // LOCKBITS_KIND
+      if (list[i].addr == 3 || list[i].mask == 0)
+	index[length++] = i;
+    } 
     if (list[i].mask == 0) break;
   }
 
@@ -182,7 +184,7 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t in
     }
     
     for (uint16_t i = 0; i < length; i++) 
-      myMenuDrawBox(fuseProps[list[i].mes], i, cameraY_actual, optval(list, length, i, buf),list[i].danger && safeedit);
+      myMenuDrawBox(fuseProps[list[index[i]].mes], i, cameraY_actual, optval(list, length, i, index, buf),list[index[i]].danger && safeedit);
     
     myMenuDrawCursor(cursor, cameraY_actual);
     
@@ -196,11 +198,14 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t in
     gb.display.drawFastHLine(0, 7, gb.display.width());
 
     if (gb.buttons.released(BUTTON_A)) {
-      if (list[cursor].mask == 0) {
+      if (list[index[cursor]].mask == 0) {
 	gb.sound.playOK();
       	return new_value(buf);
       }
-      if (change_value(list, length, cursor, buf) && !error) gb.sound.playOK();
+      DEBPR("selected entry: ");
+      DEBLN(cursor);
+      DEBLN(length);
+      if (change_value(list, length, cursor, index, buf) && !error) gb.sound.playOK();
     }
 
     if (gb.buttons.released(BUTTON_B)) {
@@ -244,29 +249,39 @@ uint32_t fuses_edit_menu(const char title[], fuseItems const list[], uint32_t in
   return -1;
 }
 
-int8_t optval(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+int8_t optval(fuseItems const list[], uint16_t length, uint16_t ix, uint16_t index[], uint8_t buf[4])
 {
   int8_t marker = 1;
-  if (list[ix].mask == 0) return 0;
+  if (list[index[ix]].mask == 0) return 0;
   for (uint16_t i=0; i < length; i++)
-    if (i != ix && list[i].mask == list[ix].mask && list[i].addr == list[ix].addr) marker = 2;
-  if ((list[ix].mask & buf[list[ix].addr]) != list[ix].value) marker = -marker;
+    if (i != ix && list[index[i]].mask == list[index[ix]].mask && list[index[i]].addr == list[index[ix]].addr) marker = 2;
+  if ((list[index[ix]].mask & buf[list[index[ix]].addr]) != list[index[ix]].value) marker = -marker;
   return marker;
 }
 
-boolean change_value(fuseItems const list[], uint16_t length, uint16_t ix, uint8_t buf[4])
+boolean change_value(fuseItems const list[], uint16_t length, uint16_t ix, uint16_t index[], uint8_t buf[4])
 {
-  if (list[ix].danger && safeedit) {
+  if (list[index[ix]].danger && safeedit) {
     return false;
   }
-  int8_t marker = optval(list, length, ix, buf);
+  int8_t marker = optval(list, length, ix, index, buf);
+  DEBPR("change_value: marker=");
+  DEBPR(marker);
+  DEBPR(" mask=");
+  DEBPRF(list[index[ix]].mask,HEX);
+  DEBPR(" value=");
+  DEBLNF(list[index[ix]].value,HEX);
+  DEBPR(" before: ");
+  DEBLNF(buf[list[index[ix]].addr],HEX);
   switch (marker) {
   case 2: break;
-  case -2: buf[list[ix].addr] = (buf[list[ix].addr] & ~list[ix].mask) | list[ix].value; break;
-  case 1: buf[list[ix].addr] |= list[ix].mask; break;
-  case -1: buf[list[ix].addr] &= ~list[ix].mask; break;
+  case -2: buf[list[index[ix]].addr] = (buf[list[index[ix]].addr] & ~list[index[ix]].mask) | list[index[ix]].value; break;
+  case 1: buf[list[index[ix]].addr] |= list[index[ix]].mask; break;
+  case -1: buf[list[index[ix]].addr] &= ~list[index[ix]].mask; break;
   default: error = CONFUSION_ERROR; break;
   }
+  DEBPR(" after: ");
+  DEBLNF(buf[list[index[ix]].addr],HEX);
   return true;
 }
 

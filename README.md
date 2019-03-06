@@ -36,7 +36,6 @@ I plan to develop a PCB that provides an electrical safe interface.
 ## Planned additions
 
 The following things are planned for the near future:
-* Adding an interface to edit the fuses and lockbits in a way similar to Atmel Studio/AVRfuse/Engbedded Atmel AVR® Fuse Calculator. Part of it works already.
 * Porting the program to ODROID GO.
 * Developing a PCB with a level shifter.
 

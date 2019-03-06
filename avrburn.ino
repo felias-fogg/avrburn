@@ -56,8 +56,12 @@
  *    - this setting is respected in fuse_edit_menu
  * V0.9.2 (5.3.2019)
  *    - fixed yes/no problem
- * V0.9.3
+ * V0.9.3 (5.3.2019)
  *   - now all fuse strings for the tested MCUs are defined
+ * V0.9.4 (6.3.2019)
+ *   - lockbits editing
+ *   - fuse edit works now even if no MCU is connected
+ *   - some fuse value problems fixed
  *    
  */
 
@@ -65,7 +69,7 @@
 
 // #define DEBUG
 
-#define VERSION "0.9.3"
+#define VERSION "0.9.4"
 
 // number of els
 #define NUMELS(x) (sizeof(x)/sizeof(x[0]))
@@ -382,7 +386,7 @@ void fuse_menu(uint8_t kind)
     if (kind == FUSE_KIND) set_default_fuses();
     else erase(false);
     break;
-  case FUSE_EDIT: fuse_edit(); break;
+  case FUSE_EDIT: fuse_lock_edit(kind); break;
   case -1:
   case FUSE_EXIT: state = MENU_STATE; break;
   default: error = NYI_ERROR; break;
@@ -618,6 +622,7 @@ void erase(boolean toMainMenu)
     gb.display.println("Erasing ...");
     set_prog_mode(true);
     mix = mcu_ix(read_sig());
+    if (mix == 0) error = NO_MCU_ERROR;
     if (error) {
       set_prog_mode(false);
       return;
@@ -684,6 +689,8 @@ void show_fuses(uint8_t kind)
   set_prog_mode(true);
   uint16_t mcuix = mcu_ix(mcusig = read_sig());
   set_prog_mode(false);
+  if (mcuix == 0) error = NO_MCU_ERROR;
+  if (error) return;
   display_header(YELLOW, (kind == FUSE_KIND ? "Show Fuses" : "Show Lock Bits"));
   while (!gb.update());
   set_prog_mode(true);
@@ -1311,22 +1318,29 @@ void set_default_fuses() {
   set_prog_mode(true);
   uint16_t mcuix = mcu_ix(mcusig = read_sig());
   set_prog_mode(false);
+  if (mcuix == 0) error = NO_MCU_ERROR;
   if (error) return;
-  set_fuses("Default fuses", mcuList[mcuix].fuses,mcuList[mcuix].lowFuse,mcuList[mcuix].highFuse,mcuList[mcuix].extendedFuse);
+  set_fuses("Default fuses", FUSE_KIND, mcuList[mcuix].fuses,mcuList[mcuix].lowFuse,mcuList[mcuix].highFuse,mcuList[mcuix].extendedFuse, 0);
 }
 
-void set_fuses(const char fusetitle[], uint8_t fusenum, uint8_t low, uint8_t high, uint8_t ext)
+void set_fuses(const char fusetitle[], uint8_t kind, uint8_t fusenum, uint8_t low, uint8_t high, uint8_t ext, uint8_t lock)
 {
   boolean verified = true;
   display_header(YELLOW, fusetitle);
   while (!gb.update());
   set_prog_mode(true);
-  program_fuses(fusenum, low, high, ext);
+  if (kind == FUSE_KIND) 
+    program_fuses(fusenum, low, high, ext);
+  else
+    program_lock(lock);
   set_prog_mode(false);
   set_prog_mode(true);
   if (!error) { 
     if (autoverify) {
-      verified = verify_fuses(fusenum, low, high, ext);
+      if (kind == FUSE_KIND)
+	verified = verify_fuses(fusenum, low, high, ext);
+      else
+	verified = verify_lock(lock);
     }
     while (true) {
       if (gb.update()) {
@@ -1469,21 +1483,40 @@ int16_t count_entries(File & dir, uint8_t kind)
 }  
 
 
-void fuse_edit()
+void fuse_lock_edit(uint8_t kind)
 {
-  const char prefix[] = "Do you really want\nto write the fuses:\n";
+  const char * mcuprefix = (kind == FUSE_KIND ? "Do you really want\nto write the fuses:\n"
+			 : "Do you really want\nto write the lockbits:");
+  const char * nomcuprefix = (kind == FUSE_KIND ? "Resulting fuses:\n"
+			 : "Resulting lockbits:\n");
   char question[80];
   uint16_t fix = 0;
+  boolean nomcu = false;
   int8_t reply;
   boolean verified;
   uint32_t fuses;
   uint8_t fusenum;
   set_prog_mode(true);
   uint16_t mcusig = read_sig();
-  if (!error) {
-    fuses = read_fuses();
+  if (!error && mcusig) {
+    if (kind == FUSE_KIND)
+      fuses = read_fuses();
+    else
+      fuses = (read_lock() << 24);
+    set_prog_mode(false);
+  } else if (mcusig == 0) {
+    set_prog_mode(false);
+    nomcu = true;
+    mcusig = choose_mcu();
+    if (mcusig) {
+      fuses = (mcuList[mcu_ix(mcusig)].lowFuse + (uint32_t)(mcuList[mcu_ix(mcusig)].highFuse<<8) +
+	       (uint32_t)(mcuList[mcu_ix(mcusig)].extendedFuse<<16) + 0xFF000000UL);
+    }
+  } else {
+    set_prog_mode(false);
+    return;
   }
-  set_prog_mode(false);
+  if (mcusig == 0) return;
   fusenum = mcuList[mcu_ix(mcusig)].fuses;
   if (error) return;
   for (uint16_t i=0; i < NUMELS(fuseMenuList); i++) 
@@ -1495,26 +1528,44 @@ void fuse_edit()
   do {
     DEBPR("fuse_edit before: ");
     DEBLNF(fuses,HEX);
-    fuses = fuses_edit_menu("Edit fuses", fuseMenuList[fix].fuseList,  fuses);
+    fuses = fuses_edit_menu((kind == FUSE_KIND ? "Edit fuses" : "Edit lockbits"), kind, fuseMenuList[fix].fuseList,  fuses);
     DEBPR("fuse_edit after: ");
     DEBLNF(fuses,HEX);
-    strcpy(question, prefix);
-    if (fusenum > 0) {
-      strcat(question, "L:0x");
-      strcat(question, hex_byte_str(fuses & 0xFF));
+    if (nomcu)
+      strcpy(question, nomcuprefix);
+    else
+      strcpy(question, mcuprefix);
+    if (kind == FUSE_KIND) {
+      if (fusenum > 0) {
+	strcat(question, "L:0x");
+	strcat(question, hex_byte_str(fuses & 0xFF));
+      }
+      if (fusenum > 1) {
+	strcat(question, ",H:0x");
+	strcat(question, hex_byte_str((fuses >> 8)& 0xFF));
+      }
+      if (fusenum > 2) {
+	strcat(question, ",X:0x");
+	strcat(question, hex_byte_str((fuses >> 16)& 0xFF));
+      }
+    } else {
+      strcat(question, "LB: 0x");
+      strcat(question, hex_byte_str((fuses >> 24)& 0xFF));
     }
-    if (fusenum > 1) {
-      strcat(question, ",H:0x");
-      strcat(question, hex_byte_str((fuses >> 8)& 0xFF));
+    if (nomcu) {
+      reply = (left_or_right((kind == FUSE_KIND ? "Inspect fuse values" : "Inspect lockbits"),
+			     question, "Abort", "Back", true) ? 1 : -1);
+    } else {
+      reply = left_mid_or_right((kind == FUSE_KIND ? "Writing fuse values" : "Writing lockbits"), question, "Write", "Abort", "Back", 0);
     }
-    if (fusenum > 2) {
-      strcat(question, ",X:0x");
-      strcat(question, hex_byte_str((fuses >> 16)& 0xFF));
-    }
-    reply = left_mid_or_right("Writing fuse values", question, "Write", "Abort", "Back", 0);
     if (reply == 0 || error) return;
   } while (reply != 1);
-  set_fuses("Write fuse values",fusenum, (fuses & 0xFF), ((fuses>>8) & 0xFF), ((fuses>>16) & 0xFF));
+  if (nomcu) return;
+  set_fuses(((kind == FUSE_KIND) ? "Write fuse values" : "Write lockbits"), kind, fusenum,
+    (fuses & 0xFF),
+    ((fuses>>8) & 0xFF),
+    ((fuses>>16) & 0xFF),
+    ((fuses>>24) & 0xFF));
 }
 
 char * hex_byte_str(uint8_t num)
@@ -1533,4 +1584,17 @@ char conv_to_hexchar(uint8_t dig)
   } else {
     return (char)((dig&0xf)+(uint8_t)'A'-10);
   }
+}
+
+uint16_t choose_mcu()
+{
+  uint16_t mcusig = 0;
+  char * mcunames[NUMELS(mcuList)];
+
+  if (!left_or_right("No MCU present", "Do you want to\ninspect fuses/lock\nbits of a MCUtype?", "Yes", "No", 1)) return 0;
+  for (uint16_t i=0; i < NUMELS(mcuList); i++) 
+    mcunames[i] = (char *)mcuList[i].name;
+  int16_t result = menu("Choose MCU type", mcunames, NULL, NUMELS(mcuList), 0);
+  if (result < 0) return 0;
+  else return mcuList[result].signature;
 }

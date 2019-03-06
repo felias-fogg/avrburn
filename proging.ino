@@ -129,9 +129,7 @@ uint8_t read_lock()
 {
   uint8_t lock;
   spidelay = FUSE_SPI_SPEED;
-  set_prog_mode(true);
   lock =  spi_transaction(0x58, 0x00, 0x00, 0x00) & 0xFF;
-  set_prog_mode(false);
   return lock;
 }
 
