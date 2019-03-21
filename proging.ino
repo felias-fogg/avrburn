@@ -55,11 +55,19 @@ void set_prog_mode(boolean on)
   DEBLN(on);
   spidelay = FUSE_SPI_SPEED;
   if (on) {
+#if LEFELSHIFTER
+    setOutput(PORT_SCK);
+    setHigh(PORT_SCK);
+    setOutput(PORT_RST);
+    setHigh(PORT_RST);
+    setLow(PORT_SCK);
+#else
     setInput(PORT_SCK);
     setOutput(PORT_RST);
     setHigh(PORT_RST);
     setOutput(PORT_SCK);
     setLow(PORT_SCK);
+#endif
     delay(50);
     setLow(PORT_RST);
     delay(50);
@@ -70,6 +78,16 @@ void set_prog_mode(boolean on)
     progmode = true;
     check_extended_addr(0);
   } else {
+#if LEVELSHIFTER
+    setLow(PORT_MISO);
+    setInput(PORT_MISO);
+    setOutput(PORT_SCK);
+    setHigh(PORT_SCK);
+    setOutput(PORT_MOSI);
+    setHigh(PORT_MOSI);
+    setOutput(PORT_RST);
+    setHigh(PORT_RST);
+#else    
     setLow(PORT_SCK);
     setInput(PORT_SCK);
     setLow(PORT_MISO);
@@ -78,6 +96,7 @@ void set_prog_mode(boolean on)
     setInput(PORT_MOSI);
     setLow(PORT_RST);
     setInput(PORT_RST);
+#endif
     progmode = false;
   }
 }

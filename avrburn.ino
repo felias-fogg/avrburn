@@ -62,6 +62,8 @@
  *   - lockbits editing
  *   - fuse edit works now even if no MCU is connected
  *   - some fuse value problems fixed
+ * V0.9.5 (21.3.2019)
+ *   - if level shifter is used, then the interface line should be HIGH when inactive (instead of INPUT!)
  *    
  */
 
@@ -69,7 +71,8 @@
 
 // #define DEBUG
 
-#define VERSION "0.9.4"
+#define LEVELSHIFTER 1 // when level shifter is used: set output lines HIGH (instead of INPUT), when inactive.
+#define VERSION "0.9.5"
 
 // number of els
 #define NUMELS(x) (sizeof(x)/sizeof(x[0]))
@@ -253,7 +256,6 @@ void start_burner()
   }
   state = MENU_STATE;
   error = NO_ERROR;
-  progmode = false;
   mmpos = 0;
   setpos = 0;
   set_prog_mode(false);
