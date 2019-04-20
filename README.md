@@ -29,15 +29,14 @@ these pins with the corresponding pins on the target system. It is, of course, p
 
 **BEWARE**: If you connect the pins directly to the target system, make sure that you connect only to
 3.3 Volt systems. Because the Gamebuino Meta is not 5 Volt tolerant, it will get damaged if
-connected to a 5 Volt system. If you have a chip in a programming socket and the Gambuino supplies the current, then there won't be any problem.
+connected to a 5 Volt system. If you have a chip in a programming socket and the Gambuino supplies the current, then there won't be any problem (not possible anymore!). 
 
-I plan to develop a PCB that provides an electrical safe interface.
+There exists now a PCB that can be plugged into the Meta, which does the level shifting if necessary. In other words, you can now also program 5 volt systems!
 
 ## Planned additions
 
-The following things are planned for the near future:
-* Porting the program to ODROID GO.
-* Developing a PCB with a level shifter.
+The following things are planned for the future:
+* Porting the program to ODROID GO (not so sure anymore)
 
 The software is published under the [LGPL](http://www.gnu.org/licenses/lgpl-3.0.html).
 
